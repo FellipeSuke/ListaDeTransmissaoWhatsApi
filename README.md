@@ -1,0 +1,1 @@
+Lista de transmissão para WhatsApp Api
