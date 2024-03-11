@@ -1,829 +1,1390 @@
 using ListaDeTransmissaoWhatsApi.Models;
+using ListaDeTransmissaoWhatsApi.Properties;
+using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using RestSharp;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.Common;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
+#nullable enable
 namespace ListaDeTransmissaoWhatsApi
 {
     public partial class Form1 : Form
     {
-        //Variaveis Ambiente
-        public string sessionId;
-        //public string host = "https://whatsapi.up.railway.app/";
-        public string host = "http://apisuke.ddns.net:3000/";
-        //public string host = "http://191.220.2.201:3000";
-        public string keyName = "x-api-key";
+        public int idCredencial;
+        public string Nome;
+        public string NomeCompleto;
+        public string Empresa;
+        public string Status;
+        public string keyName;
         public string keyValue;
-        DadosImagemAnexo imagemEmAnexo = new();
+        public string host;
+        public string sessionId;
+        public string privilegios;
+        private DadosImagemAnexo imagemEmAnexo = new DadosImagemAnexo();
+        private MySqlConnection connection;
+        private const string server = "apisuke.ddns.net";
+        private const int port = 3306;
+        private const string database = "db";
+        private const string username = "Suke";
+        private const string password = "Unreal05";
 
-        public Form1()
+        public Form1(int idCredencial)
         {
-            InitializeComponent();
-            tbSessionId.Text = Properties.Settings.Default.sessao;
-            tbApiKey.Text = Properties.Settings.Default.apiKey;
-            sessionId = tbSessionId.Text;
-            keyValue = tbApiKey.Text;
-            PingSystem();
+            this.InitializeComponent();
+            this.idCredencial = idCredencial;
+            this.Shown += (EventHandler)(async (sender, e) => await this.LoadDataAsync());
+        }
 
-            PreencherCheckListBoxComArquivos();
+        private void InitializeDB()
+        {
+            DefaultInterpolatedStringHandler interpolatedStringHandler = new DefaultInterpolatedStringHandler(34, 5);
+            interpolatedStringHandler.AppendLiteral("Server=");
+            interpolatedStringHandler.AppendFormatted("apisuke.ddns.net");
+            interpolatedStringHandler.AppendLiteral(";Port=");
+            interpolatedStringHandler.AppendFormatted<int>(3306);
+            interpolatedStringHandler.AppendLiteral(";Database=");
+            interpolatedStringHandler.AppendFormatted("db");
+            interpolatedStringHandler.AppendLiteral(";Uid=");
+            interpolatedStringHandler.AppendFormatted("Suke");
+            interpolatedStringHandler.AppendLiteral(";Pwd=");
+            interpolatedStringHandler.AppendFormatted("Unreal05");
+            interpolatedStringHandler.AppendLiteral(";");
+            string stringAndClear = interpolatedStringHandler.ToStringAndClear();
+            try
+            {
+                this.connection = new MySqlConnection(stringAndClear);
+                this.connection.Open();
+            }
+            catch (MySqlException ex)
+            {
+                int num = (int)MessageBox.Show("Erro ao conectar ao banco de dados: " + ex.Message);
+                Environment.Exit(1);
+            }
+        }
 
-
+        private async
+#nullable enable
+        Task LoadDataAsync()
+        {
+            try
+            {
+                this.InitializeDB();
+                string query = "SELECT * FROM Credenciais WHERE IdCredencial = @idCredencial";
+                using (MySqlCommand command = new MySqlCommand(query, this.connection))
+                {
+                    command.Parameters.AddWithValue("@idCredencial", (object)this.idCredencial);
+                    DbDataReader dbDataReader = await command.ExecuteReaderAsync();
+                    MySqlDataReader reader = (MySqlDataReader)dbDataReader;
+                    dbDataReader = (DbDataReader)null;
+                    try
+                    {
+                        if (reader.Read())
+                        {
+                            this.Nome = reader["Nome"].ToString();
+                            this.NomeCompleto = reader["NomeCompleto"].ToString();
+                            this.Empresa = reader["Empresa"].ToString();
+                            this.Status = reader["Status"].ToString();
+                            this.keyName = reader["KeyName"].ToString();
+                            this.keyValue = reader["KeyValue"].ToString();
+                            this.host = reader["HostApi"].ToString();
+                            this.sessionId = reader["SessionId"].ToString();
+                            this.privilegios = reader["Privilegios"].ToString();
+                            this.tbSessionId.Text = this.sessionId;
+                            this.tbSessionId.Enabled = false;
+                            this.labelNomeCompleto.Text = this.NomeCompleto + "  " + this.Empresa;
+                            if (this.privilegios == "superUser")
+                            {
+                                this.cbAdministração.Visible = true;
+                                this.cbAdministração.Enabled = true;
+                            }
+                            Application.DoEvents();
+                            if (!string.IsNullOrEmpty(this.keyValue))
+                            {
+                                string str = await this.PingSystem();
+                                await this.PreencherCheckListBoxComGruposAsync();
+                            }
+                        }
+                        else
+                        {
+                            int num = (int)MessageBox.Show("Usuário não encontrado.");
+                        }
+                    }
+                    finally
+                    {
+                        reader?.Dispose();
+                    }
+                    reader = (MySqlDataReader)null;
+                }
+                query = (string)null;
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro: " + ex.Message);
+            }
+            finally
+            {
+                this.connection.Close();
+            }
         }
 
         public void PrintMessage(RestResponse response, string comando)
         {
-            var responseData = DesserializeResponse(response);
-
-            if (responseData.Success)
+            try
             {
-                labelResponse.Text = $"{comando}{Environment.NewLine}{responseData.Message}";
-
-
-            }
-            else if (!responseData.Success)
-            {
-                if (responseData.Error is not null)
+                StartSession startSession = this.DesserializeResponse(response);
+                if (startSession.Success)
                 {
-                    labelResponse.Text = $"Falha{Environment.NewLine}{responseData.Error}";
+                    string str = this.Translate(startSession.Message);
+                    this.labelResponse.Text = comando + Environment.NewLine + str;
+                }
+                else if (!startSession.Success)
+                {
+                    if (startSession.Message != null)
+                        this.labelResponse.Text = "Falha" + Environment.NewLine + this.Translate(startSession.Message);
+                    else
+                        this.labelResponse.Text = "Falha" + Environment.NewLine + startSession.Message;
                 }
                 else
-                {
-                    labelResponse.Text = $"Falha{Environment.NewLine}{responseData.Message}";
-                }
-
+                    this.labelResponse.Text = "Sem Dados de Sucesso";
+                Application.DoEvents();
             }
-            else
+            catch (Exception ex)
             {
-                labelResponse.Text = "Sem Dados de Sucesso";
+                throw;
             }
+        }
 
+        private string Translate(string englishMessage)
+        {
+            return new ResponseTranslator().Translate(englishMessage);
         }
 
         private async void cbIniciarsessao_Click(object sender, EventArgs e)
         {
-            Processando();
-            RestResponse response = await RequestRestGetAsync("/session/start/");
-            PrintMessage(response, $"Sessão {sessionId} Conectado");
-            tbSessionId.Enabled = false;
-            await ShowQRCodeAsync(response);
-
+            this.cbStats.Enabled = false;
+            this.cbIniciarsessao.Enabled = false;
+            this.cbEnviarMensagem.Enabled = false;
+            this.Processando();
+            RestResponse response = await this.RequestRestGetAsync("/session/start/");
+            this.PrintMessage(response, "Sessão " + this.sessionId + " Conectado");
+            this.tbSessionId.Enabled = false;
+            await this.ShowQRCodeAsync(response);
+            this.cbStats.Enabled = true;
+            this.cbIniciarsessao.Enabled = true;
+            this.cbEnviarMensagem.Enabled = true;
+            response = (RestResponse)null;
         }
 
         private async void cbEncerraSessao_Click(object sender, EventArgs e)
         {
-            Processando();
-            RestResponse response = await RequestRestGetAsync("/session/terminate/");
-            PrintMessage(response, $"Sessão {sessionId} Encerrada");
-            tbSessionId.Enabled = true;
-
+            int attempts = 0;
+            while (attempts < 3)
+            {
+                try
+                {
+                    this.Processando();
+                    RestResponse response = await this.RequestRestGetAsync("/session/terminate/");
+                    if (response != null)
+                    {
+                        this.PrintMessage(response, "Sessão " + this.sessionId + " Encerrada");
+                        break;
+                    }
+                    ++attempts;
+                    response = (RestResponse)null;
+                }
+                catch (Exception ex)
+                {
+                    this.labelResponse.Text = "Erro: " + ex.Message;
+                    ++attempts;
+                }
+            }
+            if (attempts != 3)
+                return;
+            this.labelResponse.Text = "Todas as tentativas falharam. Não foi possível encerrar a sessão.";
         }
 
         private async void cbStats_Click(object sender, EventArgs e)
         {
-            Processando();
-            RestResponse response = await RequestRestGetAsync("/session/status/");
-            PrintMessage(response, $"Sessão {sessionId} ");
-
+            try
+            {
+                this.Processando();
+                RestResponse response = await this.RequestRestGetAsync("/session/status/");
+                this.PrintMessage(response, "Sessão " + this.sessionId + " ");
+                response = (RestResponse)null;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private async Task ShowQRCodeAsync(RestResponse cache)
         {
+            if (cache == null)
+                throw new ArgumentNullException(nameof(cache), "O parâmetro cache não pode ser nulo.");
+
             Processando();
-            int i = 0;
-        AtualizaQrCode:
-
-            RestResponse responseStatus = await RequestRestGetAsync("/session/status/");
-            var status = DesserializeResponse(responseStatus);
-
-            if (status.State != "CONNECTED")
-            {
-
-                bool checkImg = true;
-                RestResponse response = new();
-                StartSession responseData = new();
-                try
-                {
-                    Thread.Sleep(1000);
-                    i++;
-                    while (checkImg)
-                    {
-                        response = await RequestRestGetAsync($"/session/qr/", "/Image", "image/png");
-                        //responseData = JsonConvert.DeserializeObject<StartSession>(response.Content);
-                        if (response.ContentType != "image/png")
-                        {
-                            Thread.Sleep(1000);
-                            i++;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    var ms = new MemoryStream(response.RawBytes);
-                    pbQrCode.Image = System.Drawing.Image.FromStream(ms);
-                    PrintMessage(cache, $"Sessão {sessionId} Conectado");
-                    pbQrCode.Visible = true;
-                    cbRefreshQrCode.Visible = true;
-                    labelResponse.Text = $"Aguardando QR Code... {i}Seg";
-                    if (i < 60)
-                    {
-                        goto AtualizaQrCode;
-                    }
-                    else
-                    {
-                        labelResponse.Text = $"Aguardando QR Code...........";
-                    }
-
-
-
-
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex);
-                }
-            }
-            else
-            {
-                PrintMessage(responseStatus, $"Sessão {sessionId} {status.State}");
-                pbQrCode.Visible = false;
-            }
-
-        }
-
-        private async Task<RestResponse> RequestRestGetAsync(string caminhoSession, string optional = "", string contentType = "application/json")
-        {
-            var options = new RestClientOptions(host)
-            {
-                MaxTimeout = 10000,
-
-            };
-            var client = new RestClient(options);
-            var request = new RestRequest(caminhoSession + sessionId + optional, Method.Get)
-            {
-                Timeout = 5000 // Tempo limite de 5 segundos (5000 milissegundos)
-            };
-            request.AddHeader(keyName, keyValue);
-            request.AddHeader("Content-Type", contentType);
-            return await client.ExecuteAsync(request);
-        }
-
-        private async Task PostMessageWhatsapp(string ItensMarcados, string host, int indexLinha)
-        {
-            var usuarioTarget = DadosDoEnvioUsuario(ItensMarcados);
-
-            var options = new RestClientOptions(host)
-            {
-                MaxTimeout = 30000,
-            };
-            var client = new RestClient(options);
-            var request = new RestRequest($"/client/sendMessage/{sessionId}", Method.Post)
-            {
-                Timeout = 5000 // Tempo limite de 5 segundos (5000 milissegundos)
-            };
-            request.AddHeader(keyName, keyValue);
-            request.AddHeader("Content-Type", "application/json");
-
-
-
-            string ReplaceDeVariaveisMsg = tbCampoMessage.Text.Replace("@PrimeiroNomeContato@", usuarioTarget.PrimeiroNome.ToString()).Replace("@NomeCompletoDoContato@", usuarioTarget.NomeCompleto.ToString()).Replace("@NumeroDoContato@", usuarioTarget.Numero.ToString());
-
-            string textoSemQuebrasDeLinha = ReplaceDeVariaveisMsg.Replace("\n", @"\n").Replace("\r", @"\r");
-
-            var body = @"{
-" + "\n" +
-  @$"  ""chatId"": ""{usuarioTarget.Numero}"",
-" + "\n" +
-  @"  ""contentType"": ""string"",
-" + "\n" +
-  @$"  ""content"": ""{textoSemQuebrasDeLinha}""
-" + "\n" +
-  @"}";
-
-            request.AddStringBody(body, DataFormat.Json);
-            RestResponse response = await client.ExecuteAsync(request);
-            labelResponse.Text = response.ResponseStatus.ToString();
 
             try
             {
-                if (!listBox1.Items[indexLinha].ToString().Contains(usuarioTarget.PrimeiroNome))
-                {
-                    AcrescentarStringEmLinhaEspecifica(listBox1, $"{usuarioTarget.PrimeiroNome} >> Msg: {response.StatusDescription}", indexLinha);
-                }
-                else
-                {
-                    AcrescentarStringEmLinhaEspecifica(listBox1, $" >> Msg: {response.StatusDescription}", indexLinha);
-                }
-            }
-            catch
-            {
-                AcrescentarStringEmLinhaEspecifica(listBox1, $"{usuarioTarget.PrimeiroNome} >> Msg: {response.StatusDescription}", indexLinha);
-            }
+                int timeoutSeconds = 180;
+                int elapsedTime = 0;
+                bool connected = false;
 
+                while (!connected && elapsedTime < timeoutSeconds)
+                {
+                    RestResponse responseStatus = await RequestRestGetAsync("/session/status/");
+
+                    if (responseStatus != null && !string.IsNullOrEmpty(responseStatus.Content))
+                    {
+                        StartSession status = DesserializeResponse(responseStatus);
+
+                        if (status != null && status.State == "CONNECTED")
+                        {
+                            connected = true;
+                            PrintMessage(responseStatus, $"Sessão {sessionId} {status.State}");
+                            pbQrCode.Visible = false;
+                            cbRefreshQrCode.Visible = false;
+                        }
+
+                        status = null;
+                    }
+
+                    if (!connected)
+                    {
+                        RestResponse response = await RequestRestGetAsync("/session/qr/", "/Image", "image/png");
+
+                        if (response != null && response.ContentType == "image/png")
+                        {
+                            using (MemoryStream ms = new MemoryStream(response.RawBytes))
+                            {
+                                pbQrCode.Image = Image.FromStream(ms);
+                                pbQrCode.Visible = true;
+                                cbRefreshQrCode.Visible = true;
+                            }
+                        }
+
+                        labelResponse.Text = $"Aguardando QR Code... {elapsedTime}Seg";
+                        elapsedTime++;
+                        await Task.Delay(1000);
+                    }
+
+                    responseStatus = null;
+                }
+
+                if (!connected)
+                {
+                    MessageBox.Show("Tempo esgotado. QR Code não recebido.");
+                    labelResponse.Text = "Tempo esgotado. QR Code não recebido.";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ocorreu um erro: " + ex.Message);
+                labelResponse.Text = ex.Message;
+            }
         }
 
-        private async Task PostMessageWhatsappMedia(string ItensMarcados, string base64Image, byte[] imageBytes, string imagePath, int indexLinha)
+
+        private async Task<RestResponse> RequestRestGetAsync(
+          string caminhoSession,
+          string optional = "",
+          string contentType = "application/json")
         {
-            var usuarioTarget = DadosDoEnvioUsuario(ItensMarcados);
-            var body = new
+            RestResponse async;
+            try
             {
-                chatId = usuarioTarget.Numero,
-                contentType = "MessageMedia",
-                content = new
+                RestClientOptions options = new RestClientOptions(this.host)
                 {
-                    mimetype = "image/jpeg",
-                    data = base64Image,
-                    filename = Path.GetFileName(imagePath)
+                    MaxTimeout = 10000
+                };
+                RestClient client = new RestClient(options);
+                RestRequest request = new RestRequest(caminhoSession + this.sessionId + optional)
+                {
+                    Timeout = 5000
+                };
+                request.AddHeader(this.keyName, this.keyValue);
+                request.AddHeader("Content-Type", contentType);
+                async = await client.ExecuteAsync(request, new CancellationToken());
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+            return async;
+        }
+
+        private async Task<string> PostMessageWhatsapp(
+          string ItensMarcados,
+          string host,
+          int indexLinha)
+        {
+            string str;
+            try
+            {
+                DadosDoUsuario usuarioTarget = this.DadosDoEnvioUsuario(ItensMarcados);
+                RestClientOptions options = new RestClientOptions(host)
+                {
+                    MaxTimeout = 30000
+                };
+                RestClient client = new RestClient(options);
+                RestRequest request = new RestRequest("/client/sendMessage/" + this.sessionId, Method.Post)
+                {
+                    Timeout = 5000
+                };
+                request.AddHeader(this.keyName, this.keyValue);
+                request.AddHeader("Content-Type", "application/json");
+                string ReplaceDeVariaveisMsg = this.tbCampoMessage.Text.Replace("@PrimeiroNomeContato@", usuarioTarget.PrimeiroNome.ToString()).Replace("@NomeCompletoDoContato@", usuarioTarget.NomeCompleto.ToString()).Replace("@NumeroDoContato@", usuarioTarget.Numero.ToString());
+                string textoSemQuebrasDeLinha = ReplaceDeVariaveisMsg.Replace("\n", "\\n").Replace("\r", "\\r");
+                string body = "{\r\n        \n  \"chatId\": \"" + usuarioTarget.Numero + "\",\r\n        \n  \"contentType\": \"string\",\r\n        \n  \"content\": \"" + textoSemQuebrasDeLinha + "\"\r\n        \n}";
+                request.AddStringBody(body, DataFormat.Json);
+                RestResponse response = await client.ExecuteAsync(request, new CancellationToken());
+                try
+                {
+                    if (!this.listBox1.Items[indexLinha].ToString().Contains(usuarioTarget.PrimeiroNome))
+                        this.AcrescentarStringEmLinhaEspecifica(this.listBox1, usuarioTarget.PrimeiroNome + " >> Msg: " + response.StatusDescription, indexLinha);
+                    else
+                        this.AcrescentarStringEmLinhaEspecifica(this.listBox1, " >> Msg: " + response.StatusDescription, indexLinha);
                 }
-            };
-
-            // Configuração do RestClient e RestRequest
-            var options = new RestClientOptions(host)
+                catch
+                {
+                    this.AcrescentarStringEmLinhaEspecifica(this.listBox1, usuarioTarget.PrimeiroNome + " >> Msg: " + response.StatusDescription, indexLinha);
+                }
+                str = response.ResponseStatus.ToString();
+            }
+            catch (Exception ex)
             {
-                MaxTimeout = 30000 // Define o tempo máximo de espera para estabelecer uma conexão como 30 segundos
-            };
+                throw;
+            }
+            return str;
+        }
 
-            var client = new RestClient(options);
-            var request = new RestRequest($"/client/sendMessage/{sessionId}", Method.Post)
+        private async Task<string> PostMessageWhatsappMedia(
+          string ItensMarcados,
+          string base64Image,
+          byte[] imageBytes,
+          string imagePath,
+          int indexLinha)
+        {
+            string str;
+            try
             {
-                Timeout = 5000 // Tempo limite de 5 segundos (5000 milissegundos)
-            };
+                DadosDoUsuario usuarioTarget = this.DadosDoEnvioUsuario(ItensMarcados);
+                string extension = Path.GetExtension(imagePath)?.ToLower();
+                string mimetype = this.GetMimeTypeFromExtension(extension);
+                string ReplaceDeVariaveisMsg = this.tbCampoMessage.Text.Replace("@PrimeiroNomeContato@", usuarioTarget.PrimeiroNome.ToString()).Replace("@NomeCompletoDoContato@", usuarioTarget.NomeCompleto.ToString()).Replace("@NumeroDoContato@", usuarioTarget.Numero.ToString());
+                var body = new
+                {
+                    chatId = usuarioTarget.Numero,
+                    contentType = "MessageMedia",
+                    content = new
+                    {
+                        mimetype = mimetype,
+                        data = base64Image,
+                        filename = Path.GetFileName(imagePath)
+                    },
+                    options = new { caption = ReplaceDeVariaveisMsg }
+                };
+                RestClientOptions options = new RestClientOptions(this.host)
+                {
+                    MaxTimeout = 30000
+                };
+                RestClient client = new RestClient(options);
+                RestRequest request = new RestRequest("/client/sendMessage/" + this.sessionId, Method.Post)
+                {
+                    Timeout = 15000
+                };
+                request.AddHeader(this.keyName, this.keyValue);
+                request.AddHeader("Content-Type", "application/json");
+                request.AddJsonBody(body);
+                RestResponse response = await client.ExecuteAsync(request, new CancellationToken());
+                this.AcrescentarStringEmLinhaEspecifica(this.listBox1, usuarioTarget.PrimeiroNome + " >> Media: " + response.StatusDescription, indexLinha);
+                str = response.ResponseStatus.ToString();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+            return str;
+        }
 
-            request.AddHeader(keyName, keyValue);
-            request.AddHeader("Content-Type", "application/json");
-            request.AddJsonBody(body);
-
-            // Executa a solicitação assincronamente
-            RestResponse response = await client.ExecuteAsync(request);
-
-            // Exibe o resultado da solicitação na saída do console ou em uma MessageBox
-            labelResponse.Text = response.ResponseStatus.ToString();
-            AcrescentarStringEmLinhaEspecifica(listBox1, $"{usuarioTarget.PrimeiroNome} >> Media: {response.StatusDescription}", indexLinha);
-
+        private string GetMimeTypeFromExtension(string extension)
+        {
+            string str = extension;
+            if (str != null)
+            {
+                switch (str.Length)
+                {
+                    case 4:
+                        switch (str[2])
+                        {
+                            case 'a':
+                                if (str == ".wav")
+                                    return "audio/wav";
+                                goto label_33;
+                            case 'd':
+                                if (str == ".pdf")
+                                    return "application/pdf";
+                                goto label_33;
+                            case 'g':
+                                if (str == ".ogg")
+                                    return "audio/ogg";
+                                goto label_33;
+                            case 'i':
+                                if (str == ".gif")
+                                    break;
+                                goto label_33;
+                            case 'l':
+                                if (str == ".xls")
+                                    return "application/vnd.ms-excel";
+                                goto label_33;
+                            case 'm':
+                                if (str == ".bmp")
+                                    break;
+                                goto label_33;
+                            case 'n':
+                                if (str == ".png")
+                                    break;
+                                goto label_33;
+                            case 'o':
+                                if (str == ".mov")
+                                    return "video/quicktime";
+                                goto label_33;
+                            case 'p':
+                                switch (str)
+                                {
+                                    case ".jpg":
+                                        break;
+                                    case ".ppt":
+                                        return "application/vnd.ms-powerpoint";
+                                    case ".mp3":
+                                        return "audio/mpeg";
+                                    case ".mp4":
+                                        return "video/mp4";
+                                    default:
+                                        goto label_33;
+                                }
+                                break;
+                            case 'v':
+                                if (str == ".avi")
+                                    return "video/x-msvideo";
+                                goto label_33;
+                            case 'x':
+                                if (str == ".txt")
+                                    return "text/plain";
+                                goto label_33;
+                            default:
+                                goto label_33;
+                        }
+                        break;
+                    case 5:
+                        switch (str[1])
+                        {
+                            case 'd':
+                                if (str == ".docx")
+                                    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                                goto label_33;
+                            case 'j':
+                                if (str == ".jpeg")
+                                    break;
+                                goto label_33;
+                            case 'p':
+                                if (str == ".pptx")
+                                    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+                                goto label_33;
+                            case 'x':
+                                if (str == ".xlsx")
+                                    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                                goto label_33;
+                            default:
+                                goto label_33;
+                        }
+                        break;
+                    default:
+                        goto label_33;
+                }
+                return "image/jpeg";
+            }
+        label_33:
+            return "*/*";
         }
 
         private StartSession DesserializeResponse(RestResponse response)
         {
-            return JsonConvert.DeserializeObject<StartSession>(response.Content);
+            try
+            {
+                return JsonConvert.DeserializeObject<StartSession>(response.Content);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private void Processando()
         {
-            labelResponse.Text = "Processando...";
-            pbQrCode.Visible = false;
-            cbRefreshQrCode.Visible = false;
+            try
+            {
+                this.labelResponse.Text = "Processando...";
+                this.pbQrCode.Visible = false;
+                this.cbRefreshQrCode.Visible = false;
+                Application.DoEvents();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private async void cbRefreshQrCode_Click(object sender, EventArgs e)
         {
             try
             {
-                string cache = labelResponse.Text;
-                Processando();
-                var response = await RequestRestGetAsync($"/session/qr/", "/Image", "image/png");
-
-                var ms = new MemoryStream(response.RawBytes);
-                pbQrCode.Image = System.Drawing.Image.FromStream(ms);
-                labelResponse.Text = cache;
-                pbQrCode.Visible = true;
-                cbRefreshQrCode.Visible = true;
+                string cache = this.labelResponse.Text;
+                this.Processando();
+                RestResponse response = await this.RequestRestGetAsync("/session/qr/", "/Image", "image/png");
+                MemoryStream ms = new MemoryStream(response.RawBytes);
+                this.pbQrCode.Image = Image.FromStream((Stream)ms);
+                this.labelResponse.Text = cache;
+                this.pbQrCode.Visible = true;
+                this.cbRefreshQrCode.Visible = true;
+                cache = (string)null;
+                response = (RestResponse)null;
+                ms = (MemoryStream)null;
             }
-            //teste
-
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                throw;
             }
         }
 
         private void Campo_Leave(object sender, EventArgs e)
         {
-            TextBox campo = sender as TextBox;
-            if (campo.Text != "")
+            try
             {
-                if (campo.Text.Length != 13)
+                TextBox textBox = sender as TextBox;
+                if (!(textBox.Text != ""))
+                    return;
+                if (textBox.Text.Length != 13)
                 {
-                    MessageBox.Show("Número de celular inválido. Por favor, insira um número válido.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    campo.Focus(); // Volta o foco para o TextBox
+                    int num = (int)MessageBox.Show("Número de celular inválido. Por favor, insira um número válido.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                    textBox.Focus();
                 }
                 else
-                {
-                    sessionId = tbSessionId.Text;
-                }
+                    this.sessionId = this.tbSessionId.Text;
             }
-
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
-        private void Campo_TextChanged(object sender, EventArgs e)
+        public void Campo_TextChanged(object sender, EventArgs e)
         {
-            TextBox campo = sender as TextBox;
-
-
-
-            string phoneNumber = new string(campo.Text.Where(c => char.IsDigit(c)).ToArray());
-
-            // Formata o número como xx-xxxx-xxxx
-            if (phoneNumber.Length > 0)
+            try
             {
-                // Se a string tiver mais de 2 dígitos, insere o primeiro hífen
-                if (phoneNumber.Length > 2)
-                    phoneNumber = phoneNumber.Insert(2, "-");
-                // Se a string tiver mais de 8 dígitos, insere o segundo hífen
-                if (phoneNumber.Length > 8)
-                    phoneNumber = phoneNumber.Insert(8, "-");
+                TextBox textBox = sender as TextBox;
+                string str = new string(textBox.Text.Where<char>((Func<char, bool>)(c => char.IsDigit(c))).ToArray<char>());
+                if (str.Length > 0)
+                {
+                    if (str.Length > 2)
+                        str = str.Insert(2, "-");
+                    if (str.Length > 8)
+                        str = str.Insert(8, "-");
+                }
+                textBox.Text = str;
+                textBox.SelectionStart = textBox.Text.Length;
             }
-
-            // Define o texto formatado no TextBox
-            campo.Text = phoneNumber;
-            // Define o cursor no final do texto
-            campo.SelectionStart = campo.Text.Length;
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private void Valida_KeyPress(object sender, KeyPressEventArgs e)
         {
-            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
+            try
             {
-                e.Handled = true; // Cancela o evento
+                if (char.IsControl(e.KeyChar) || char.IsDigit(e.KeyChar))
+                    return;
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                throw;
             }
         }
 
-        private void cbAddContato_Click(object sender, EventArgs e)
+        private async void cbAddContato_Click(object sender, EventArgs e)
         {
-            if (tbNomeContato.Text != "" && tbNumeroContato.Text != "")
+            try
             {
-                string contatoWhatsapp = FormatarNumeroWhatsApp(tbNumeroContato.Text);
-                clbContatos.Items.Add((contatoWhatsapp + "; " + tbNomeContato.Text), true);
-                foreach (var item in clbContatos.Items)
+                if (this.tbNomeContato.Text != "" && this.tbNumeroContato.Text != "")
                 {
-                    tbNomeContato.Clear();
-                    tbNumeroContato.Clear();
-                    tbNumeroContato.Focus();
+                    string contatoWhatsapp = await this.FormatarNumeroWhatsApp(this.tbNumeroContato.Text);
+                    if (contatoWhatsapp != null)
+                    {
+                        this.clbContatos.Items.Add((object)(contatoWhatsapp + "; " + this.tbNomeContato.Text), true);
+                        foreach (object item in (ListBox.ObjectCollection)this.clbContatos.Items)
+                        {
+                            this.tbNomeContato.Clear();
+                            this.tbNumeroContato.Clear();
+                            this.tbNumeroContato.Focus();
+                        }
+                    }
+                    else
+                    {
+                        int num = (int)MessageBox.Show("Contato não localizado na rede WhatsaApp", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                    }
+                    contatoWhatsapp = (string)null;
+                }
+                else
+                {
+                    int num1 = (int)MessageBox.Show("Campos Obrigatórios não Preenchidos", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                MessageBox.Show($"Campos Obrigatórios não Preenchidos", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw;
             }
         }
 
-        static string FormatarNumeroWhatsApp(string telefone)
+        private async Task<string?> FormatarNumeroWhatsApp(string telefone)
         {
-            string numeroLimpo = Regex.Replace(telefone, "[^0-9]", "");
-
-            // Remove o primeiro '9' caso esteja presente
-            if (numeroLimpo.Length > 10)
+            try
             {
-                numeroLimpo = numeroLimpo.Remove(2, 1);
+                string numeroLimpo = Regex.Replace(telefone, "[^0-9]", "");
+                RestClientOptions options = new RestClientOptions(this.host)
+                {
+                    MaxTimeout = 1000
+                };
+                RestClient client = new RestClient(options);
+                RestRequest request = new RestRequest("/client/getNumberId/" + this.sessionId, Method.Post);
+                request.AddHeader(this.keyName, this.keyValue);
+                request.AddHeader("Content-Type", "application/json");
+                string body = "{\r\n\n  \"number\": \"55" + numeroLimpo + "\"\r\n\n}";
+                request.AddStringBody(body, DataFormat.Json);
+                RestResponse response = await client.ExecuteAsync(request, new CancellationToken());
+                WhatsNumeroId responseData = JsonConvert.DeserializeObject<WhatsNumeroId>(response.Content);
+                return responseData != null && responseData.Result != null ? responseData.Result._Serialized : (string)null;
             }
-
-            // Adiciona o código do país e o sufixo "@c.us"
-            return "55" + numeroLimpo + "@c.us";
+            catch (Exception ex)
+            {
+                return (string)null;
+            }
         }
 
         private async void cbEnviarMensagem_Click(object sender, EventArgs e)
         {
-            Processando();
-            labelProcessandoMsg.Visible = true;
-
-            listBox1.Items.Clear();
-            int numeroDeMensagens = 0;
-            if (imagemEmAnexo.Base64Image != null || tbCampoMessage.Text != "")
+            try
             {
-
-                if (imagemEmAnexo.Base64Image != null)
+                if (this.clbContatos.CheckedItems.Count == 0)
                 {
-                    int indexLinha = 0;
-                    foreach (var item in clbContatos.CheckedItems)
-                    {
-
-                        var usuarioTarget = DadosDoEnvioUsuario(item.ToString());
-
-                        await PostMessageWhatsappMedia(item.ToString(), imagemEmAnexo.Base64Image, imagemEmAnexo.ImageBytes, imagemEmAnexo.ImagePath, indexLinha);
-
-                        numeroDeMensagens++;
-                        indexLinha++;
-                    }
+                    int num1 = (int)MessageBox.Show("Por favor, selecione pelo menos um contato para enviar a mensagem.\nSe for um problema procure a Mariana");
                 }
-
-
-                if (tbCampoMessage.Text != "")
+                else
                 {
-                    if (numeroDeMensagens != 0)
+                    this.Processando();
+                    this.labelProcessandoMsg.Visible = true;
+                    string respostaPraLabel = "Sem Resposta";
+                    this.listBox1.Items.Clear();
+                    int numeroDeMensagens = 0;
+                    if (this.imagemEmAnexo.Base64Image != null || this.tbCampoMessage.Text != "")
                     {
-                        numeroDeMensagens = 0;
+                        if (this.imagemEmAnexo.Base64Image != null)
+                        {
+                            int indexLinha = 0;
+                            foreach (object item in this.clbContatos.CheckedItems)
+                            {
+                                DadosDoUsuario usuarioTarget = this.DadosDoEnvioUsuario(item.ToString());
+                                respostaPraLabel = await this.PostMessageWhatsappMedia(item.ToString(), this.imagemEmAnexo.Base64Image, this.imagemEmAnexo.ImageBytes, this.imagemEmAnexo.ImagePath, indexLinha);
+                                ++numeroDeMensagens;
+                                ++indexLinha;
+                                usuarioTarget = (DadosDoUsuario)null;
+                            }
+                        }
+                        if (this.tbCampoMessage.Text != "" && this.imagemEmAnexo.Base64Image == null)
+                        {
+                            if (numeroDeMensagens != 0)
+                                numeroDeMensagens = 0;
+                            int indexLinha = 0;
+                            foreach (object item in this.clbContatos.CheckedItems)
+                            {
+                                respostaPraLabel = await this.PostMessageWhatsapp(item.ToString(), this.host, indexLinha);
+                                ++numeroDeMensagens;
+                                ++indexLinha;
+                            }
+                        }
+                        this.labelProcessandoMsg.Visible = false;
+                        this.labelResponse.Text = this.Translate(respostaPraLabel);
                     }
-                    int indexLinha = 0;
-                    foreach (var item in clbContatos.CheckedItems)
+                    else
                     {
-
-
-
-
-                        await PostMessageWhatsapp(item.ToString(), host, indexLinha);
-                        numeroDeMensagens++;
-                        indexLinha++;
+                        int num2 = (int)MessageBox.Show("Não há mensagem a ser enviada.");
                     }
+                    respostaPraLabel = (string)null;
                 }
-                labelProcessandoMsg.Visible = false;
-                MessageBox.Show(numeroDeMensagens + " Mensagens Enviadas");
             }
-            else
+            catch (Exception ex)
             {
-                MessageBox.Show("Não há mensagem a ser enviada");
+                throw;
             }
         }
 
         private DadosDoUsuario DadosDoEnvioUsuario(string ItenMarcados)
         {
-            DadosDoUsuario usuario = new();
-
-            string contato = ItenMarcados;
-
-            // Dividir a string usando o ponto e vírgula como delimitador
-            string[] partes = contato.Split("; ");
-
-            if (partes.Length == 2)
+            try
             {
-                usuario.Numero = partes[0];
-                usuario.NomeCompleto = partes[1];
-
-                // Dividir o nome completo em partes usando espaço como delimitador
-                string[] nomePartes = usuario.NomeCompleto.Split(' ');
-
-                // Primeiro nome é a primeira parte
-                usuario.PrimeiroNome = nomePartes[0];
-
+                DadosDoUsuario dadosDoUsuario = new DadosDoUsuario();
+                string[] strArray1 = ItenMarcados.Split("; ");
+                if (strArray1.Length == 2)
+                {
+                    dadosDoUsuario.Numero = strArray1[0];
+                    dadosDoUsuario.NomeCompleto = strArray1[1];
+                    string[] strArray2 = dadosDoUsuario.NomeCompleto.Split(' ');
+                    dadosDoUsuario.PrimeiroNome = strArray2[0];
+                }
+                return dadosDoUsuario;
             }
-            return usuario;
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
-        private void cbConnectar_Click(object sender, EventArgs e)
+        private async void cbConnectar_Click(object sender, EventArgs e)
         {
-            LabelServidor.Text = "Conectando";
-            LabelServidor.BackColor = Color.FromArgb(255, 240, 240, 240);
-            PingSystem();
+            try
+            {
+                this.LabelServidor.Text = "Conectando";
+                this.LabelServidor.BackColor = Color.FromArgb((int)byte.MaxValue, 240, 240, 240);
+                string str = await this.PingSystem();
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro: " + ex.Message);
+            }
         }
 
         private async Task<string> PingSystem()
         {
-            var options = new RestClientOptions(host)
+            try
             {
-                MaxTimeout = 1000,
-            };
-            var client = new RestClient(options);
-            var request = new RestRequest("/PING", Method.Get);
-            RestResponse response = await client.ExecuteAsync(request);
-
-            var responseData = DesserializeResponse(response);
-
-            if (responseData.Success)
-            {
-                LabelServidor.Text = $"Servidor: Conectado";
-                LabelServidor.BackColor = Color.YellowGreen;
-                cbConnectar.Visible = false;
-                return responseData.Message;
-
-            }
-            else if (!responseData.Success)
-            {
-                if (responseData.Error is not null)
+                this.Processando();
+                RestResponse responseStatus = await this.RequestRestGetAsync("/session/status/");
+                this.PrintMessage(responseStatus, "Sessão " + this.sessionId + " ");
+                RestClientOptions options = new RestClientOptions(this.host)
                 {
-                    LabelServidor.Text = $"Falha{Environment.NewLine}{responseData.Error}";
-                    LabelServidor.BackColor = Color.IndianRed;
-                    cbConnectar.Visible = true;
-                    return responseData.Error;
-                }
-                else
+                    MaxTimeout = 1000
+                };
+                RestClient client = new RestClient(options);
+                RestRequest request = new RestRequest("/PING");
+                RestResponse response = await client.ExecuteAsync(request, new CancellationToken());
+                StartSession responseData = this.DesserializeResponse(response);
+                if (responseData.Success)
                 {
-                    LabelServidor.Text = $"Falha{Environment.NewLine}{responseData.Message}";
-                    LabelServidor.BackColor = Color.IndianRed;
-                    cbConnectar.Visible = true;
+                    this.LabelServidor.Text = "Servidor: Conectado";
+                    this.LabelServidor.BackColor = Color.YellowGreen;
+                    this.cbConnectar.Visible = false;
+                    this.AtivaStatusPeloServidorApp(true);
+                    Application.DoEvents();
                     return responseData.Message;
                 }
-
-            }
-            else
-            {
-                LabelServidor.Text = "Sem Dados de Sucesso";
+                if (!responseData.Success)
+                {
+                    if (responseData.Error != null)
+                    {
+                        this.LabelServidor.Text = "Falha" + Environment.NewLine + responseData.Error;
+                        this.LabelServidor.BackColor = Color.IndianRed;
+                        this.cbConnectar.Visible = true;
+                        Application.DoEvents();
+                        return responseData.Error;
+                    }
+                    this.LabelServidor.Text = "Falha" + Environment.NewLine + responseData.Message;
+                    this.AtivaStatusPeloServidorApp(false);
+                    Application.DoEvents();
+                    return responseData.Message;
+                }
+                this.LabelServidor.Text = "Sem Dados de Sucesso";
+                this.LabelServidor.BackColor = Color.IndianRed;
+                this.cbConnectar.Visible = true;
+                this.AtivaStatusPeloServidorApp(false);
+                Application.DoEvents();
                 return "Sem Dados de Sucesso";
+            }
+            catch (Exception ex)
+            {
+                this.LabelServidor.Text = "Servidor OFFLINE";
+                this.LabelServidor.BackColor = Color.IndianRed;
+                this.AtivaStatusPeloServidorApp(false);
+                Application.DoEvents();
+                return "Sem Dados de Sucesso";
+            }
+        }
+
+        private void AtivaStatusPeloServidorApp(bool Ativa)
+        {
+            try
+            {
+                this.cbIniciarsessao.Enabled = Ativa;
+                this.cbStats.Enabled = Ativa;
+                this.cbEncerraSessao.Enabled = Ativa;
+                this.tbNumeroContato.Enabled = Ativa;
+                this.tbNomeContato.Enabled = Ativa;
+                this.tbCampoMessage.Enabled = Ativa;
+                this.cbAddContato.Enabled = Ativa;
+                this.cbSelectAll.Enabled = Ativa;
+                this.cbExcluir.Enabled = Ativa;
+                this.cbEnviarMensagem.Enabled = Ativa;
+                this.cbPrimeiroNome.Enabled = Ativa;
+                this.cbNomeCompleto.Enabled = Ativa;
+                this.cbAddImagem.Enabled = Ativa;
+            }
+            catch (Exception ex)
+            {
+                throw;
             }
         }
 
         private void cbPrimeiroNome_Click(object sender, EventArgs e)
         {
-            VariaveisDeTexto(" @PrimeiroNomeContato@ ");
+            try
+            {
+                this.VariaveisDeTexto(" @PrimeiroNomeContato@ ");
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private void cbNomeCompleto_Click(object sender, EventArgs e)
         {
-            VariaveisDeTexto(" @NomeCompletoDoContato@ ");
+            try
+            {
+                this.VariaveisDeTexto(" @NomeCompletoDoContato@ ");
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private void VariaveisDeTexto(string variavelTexto)
         {
-            int posicaoCursor = tbCampoMessage.SelectionStart;
-
-            // Insere o texto na posição do cursor
-            tbCampoMessage.Text = tbCampoMessage.Text.Insert(posicaoCursor, variavelTexto);
-
-            // Move o cursor para o final do texto inserido
-            tbCampoMessage.SelectionStart = posicaoCursor + variavelTexto.Length;
-            tbCampoMessage.SelectionLength = 0; // Desmarca o texto selecionado, se houver
-            tbCampoMessage.Focus();
+            try
+            {
+                int selectionStart = this.tbCampoMessage.SelectionStart;
+                this.tbCampoMessage.Text = this.tbCampoMessage.Text.Insert(selectionStart, variavelTexto);
+                this.tbCampoMessage.SelectionStart = selectionStart + variavelTexto.Length;
+                this.tbCampoMessage.SelectionLength = 0;
+                this.tbCampoMessage.Focus();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
-        private void cbSelectAll_Click(object sender, EventArgs e) // EM CONSTRUÇÂO
+        private void cbSelectAll_Click(object sender, EventArgs e)
         {
-            if (clbContatos.GetItemChecked(0))
+            try
             {
-                for (int i = 0; i < clbContatos.Items.Count; i++)
+                if (this.clbContatos.GetItemChecked(0))
                 {
-                    clbContatos.SetItemChecked(i, false);
+                    for (int index = 0; index < this.clbContatos.Items.Count; ++index)
+                        this.clbContatos.SetItemChecked(index, false);
                 }
-
-            }
-            else
-            {
-                for (int i = 0; i < clbContatos.Items.Count; i++)
+                else
                 {
-                    clbContatos.SetItemChecked(i, true);
+                    for (int index = 0; index < this.clbContatos.Items.Count; ++index)
+                        this.clbContatos.SetItemChecked(index, true);
                 }
             }
-
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         private void cbExcluir_Click(object sender, EventArgs e)
         {
-            int numeroDeContatosMarcados = clbContatos.CheckedItems.Count;
-            DialogResult result = MessageBox.Show($"Tem certeza que deseja excluir {numeroDeContatosMarcados} contatos selecionado(s)?", "Confirmação", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
+            try
             {
-
-                List<int> indicesParaRemover = new List<int>();
-
-                // Itera pelos itens selecionados
-                foreach (int indice in clbContatos.CheckedIndices)
-                {
-                    indicesParaRemover.Add(indice); // Adiciona o índice à lista de índices para remover
-                }
-
-                // Itera pelos índices para remover e remove os itens correspondentes do CheckedListBox
-                for (int i = indicesParaRemover.Count - 1; i >= 0; i--)
-                {
-                    clbContatos.Items.RemoveAt(indicesParaRemover[i]);
-                }
+                int count = this.clbContatos.CheckedItems.Count;
+                DefaultInterpolatedStringHandler interpolatedStringHandler = new DefaultInterpolatedStringHandler(56, 1);
+                interpolatedStringHandler.AppendLiteral("Tem certeza que deseja excluir ");
+                interpolatedStringHandler.AppendFormatted<int>(count);
+                interpolatedStringHandler.AppendLiteral(" contatos selecionado(s)?");
+                if (MessageBox.Show(interpolatedStringHandler.ToStringAndClear(), "Confirmação", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+                List<int> intList = new List<int>();
+                foreach (int checkedIndex in this.clbContatos.CheckedIndices)
+                    intList.Add(checkedIndex);
+                for (int index = intList.Count - 1; index >= 0; --index)
+                    this.clbContatos.Items.RemoveAt(intList[index]);
+            }
+            catch (Exception ex)
+            {
+                throw;
             }
         }
 
-        private void cbSalvarGrupo_Click(object sender, EventArgs e)
+        private async Task SalvarGrupoAsync(string nomeGrupo)
         {
-            string nomeArquivo = tbNomeDoArquivoDeGrupo.Text; // Obtém o nome do arquivo do TextBox
-
-            // Verifica se o nome do arquivo não está vazio
-            if (!string.IsNullOrWhiteSpace(nomeArquivo))
+            try
             {
-                // Diretório onde os arquivos serão salvos
-                string diretorioGrupos = Path.Combine(Application.StartupPath, "Grupos");
-
-                // Verifica se o diretório Grupos não existe e cria se necessário
-                if (!Directory.Exists(diretorioGrupos))
+                if (string.IsNullOrWhiteSpace(nomeGrupo))
                 {
-                    Directory.CreateDirectory(diretorioGrupos);
-                }
-
-                string caminhoCompleto = Path.Combine(diretorioGrupos, nomeArquivo + ".txt"); // Prepara o caminho completo do arquivo
-
-                // Salva os itens do CheckedListBox no arquivo de texto
-                SalvarItensCheckListBox(caminhoCompleto);
-                MessageBox.Show("Itens salvos com sucesso!");
-            }
-            else
-            {
-                MessageBox.Show("Por favor, insira um nome de arquivo válido.");
-            }
-        }
-
-        private void SalvarItensCheckListBox(string caminhoArquivo)
-        {
-            // Escreve os itens do CheckedListBox no arquivo de texto
-            using (StreamWriter writer = new StreamWriter(caminhoArquivo))
-            {
-                foreach (var item in clbContatos.CheckedItems)
-                {
-                    writer.WriteLine(Criptografias.Criptografar(item.ToString())); // Criptografar aqui
-
-                }
-            }
-            PreencherCheckListBoxComArquivos();
-        }
-
-        private void PreencherCheckListBoxComArquivos()
-        {
-            clbGrupoDeContado.Items.Clear();
-            // Especifique o diretório onde estão os arquivos
-            string diretorio = Path.Combine(Application.StartupPath, "Grupos");
-
-            // Verifica se o diretório existe
-            if (Directory.Exists(diretorio))
-            {
-                // Obtem uma lista dos arquivos no diretório
-                string[] arquivos = Directory.GetFiles(diretorio);
-
-                // Adiciona cada nome de arquivo ao CheckListBox
-                foreach (string arquivo in arquivos)
-                {
-                    // Obtém apenas o nome do arquivo sem o caminho completo e sem a extensão
-                    string nomeArquivo = Path.GetFileNameWithoutExtension(arquivo);
-
-                    // Adiciona o nome do arquivo ao CheckListBox
-                    clbGrupoDeContado.Items.Add(nomeArquivo);
-                }
-            }
-            else
-            {
-                // Se o diretório não existe, exibe uma mensagem de erro
-                //MessageBox.Show("O diretório especificado não existe.");
-            }
-        }
-
-        private void cbImportContatosDeGrupo_Click(object sender, EventArgs e)
-        {
-            int verificaContatoDuplo = 0;
-            foreach (string nomeArquivo in clbGrupoDeContado.CheckedItems)
-            {
-
-                string caminhoArquivo = Path.Combine(Application.StartupPath, "Grupos", nomeArquivo + ".txt");
-
-                if (File.Exists(caminhoArquivo))
-                {
-                    string[] linhas = File.ReadAllLines(caminhoArquivo);
-                    foreach (string linha in linhas)
-                    {
-                        string contatoDescriptografado = Criptografias.Descriptografar(linha);
-                        string contatoNumeroDescriptografado = Regex.Replace(contatoDescriptografado, @"[^\d]", "").Substring(2); // Remove caracteres não numéricos e os dois primeiros dígitos
-
-                        if (!clbContatos.Items.Cast<string>().Any(item => item.Contains(contatoNumeroDescriptografado))) // Verifica se algum item da lista contém o número de telefone
-                        {
-                            clbContatos.Items.Add(contatoDescriptografado, true); // Adiciona a linha completa à lista
-                        }
-                        else
-                        {
-                            verificaContatoDuplo++;
-                            clbContatos.Items.Add(contatoDescriptografado, false); // Adiciona a linha completa à lista mas não marca
-                        }
-                    }
+                    int num1 = (int)MessageBox.Show("Por favor, insira um nome de grupo válido.");
                 }
                 else
                 {
-                    MessageBox.Show($"Arquivo '{nomeArquivo}' não encontrado.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    this.InitializeDB();
+                    string queryCheckGroup = "SELECT COUNT(*) FROM GruposContatos WHERE NomeGrupo = @NomeGrupo AND IdCredencial = @IdCredencial";
+                    using (MySqlCommand command = new MySqlCommand(queryCheckGroup, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@NomeGrupo", (object)nomeGrupo);
+                        command.Parameters.AddWithValue("@IdCredencial", (object)this.idCredencial);
+                        object obj = await command.ExecuteScalarAsync();
+                        int count = Convert.ToInt32(obj);
+                        obj = (object)null;
+                        if (count > 0)
+                        {
+                            int num2 = (int)MessageBox.Show("Já existe um grupo com o mesmo nome para o usuário atual.\nAtualizando Grupo Atual", "Atualizando Grupo", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+                            return;
+                        }
+                    }
+                    string queryInsertGroup = "INSERT INTO GruposContatos (NomeGrupo, IdCredencial) VALUES (@NomeGrupo, @IdCredencial)";
+                    using (MySqlCommand command = new MySqlCommand(queryInsertGroup, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@NomeGrupo", (object)nomeGrupo);
+                        command.Parameters.AddWithValue("@IdCredencial", (object)this.idCredencial);
+                        int num3 = await command.ExecuteNonQueryAsync();
+                    }
+                    queryCheckGroup = (string)null;
+                    queryInsertGroup = (string)null;
                 }
             }
-            if (verificaContatoDuplo > 0)
+            catch (Exception ex)
             {
-                MessageBox.Show($"Há {verificaContatoDuplo} contatos já existentes adicionados sem marcação");
+                int num = (int)MessageBox.Show("Ocorreu um erro ao salvar o grupo: " + ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+            }
+            finally
+            {
+                this.connection.Close();
             }
         }
 
-        private void cbExcluirGrupoSelect_Click(object sender, EventArgs e)
+        private async void cbSalvarGrupo_Click(object sender, EventArgs e)
         {
+            await this.SalvarGrupoAsync(this.tbNomeDoArquivoDeGrupo.Text);
+            await this.SalvarItensCheckListBoxAsync(this.tbNomeDoArquivoDeGrupo.Text);
+            this.PreencherCheckListBoxComGruposAsync();
+            int num = (int)MessageBox.Show("Grupo salvo com sucesso!");
+        }
 
-
-            DialogResult result = MessageBox.Show("Tem certeza que deseja excluir o(s) Grupo(s) selecionado(s)?", "Confirmação", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
+        private async Task SalvarItensCheckListBoxAsync(string nomeGrupo)
+        {
+            try
             {
-                foreach (string nomeArquivo in clbGrupoDeContado.CheckedItems)
+                this.InitializeDB();
+                int idGrupoExistente = -1;
+                string queryCheckGroup = "SELECT IdGrupo FROM GruposContatos WHERE NomeGrupo = @NomeGrupo AND IdCredencial = @IdCredencial";
+                using (MySqlCommand command = new MySqlCommand(queryCheckGroup, this.connection))
                 {
-                    string caminhoArquivo = Path.Combine(Application.StartupPath, "Grupos", nomeArquivo + ".txt"); Path.Combine(Application.StartupPath, "Grupos", nomeArquivo + ".txt");
-
-                    if (File.Exists(caminhoArquivo))
+                    command.Parameters.AddWithValue("@NomeGrupo", (object)nomeGrupo);
+                    command.Parameters.AddWithValue("@IdCredencial", (object)this.idCredencial);
+                    object obj = await command.ExecuteScalarAsync();
+                    idGrupoExistente = Convert.ToInt32(obj);
+                    obj = (object)null;
+                }
+                if (idGrupoExistente != -1)
+                {
+                    string queryDeleteContatos = "DELETE FROM Contatos WHERE IdGrupo = @IdGrupo";
+                    using (MySqlCommand command = new MySqlCommand(queryDeleteContatos, this.connection))
                     {
-                        try
+                        command.Parameters.AddWithValue("@IdGrupo", (object)idGrupoExistente);
+                        int num = await command.ExecuteNonQueryAsync();
+                    }
+                    queryDeleteContatos = (string)null;
+                }
+                foreach (object item in this.clbContatos.CheckedItems)
+                {
+                    string contatoCriptografado = Criptografias.Criptografar(item.ToString());
+                    string queryInsertContato = "INSERT INTO Contatos (NomeContato, IdGrupo) VALUES (@NomeContato, @IdGrupo)";
+                    using (MySqlCommand command = new MySqlCommand(queryInsertContato, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@NomeContato", (object)contatoCriptografado);
+                        command.Parameters.AddWithValue("@IdGrupo", (object)idGrupoExistente);
+                        int num = await command.ExecuteNonQueryAsync();
+                    }
+                    contatoCriptografado = (string)null;
+                    queryInsertContato = (string)null;
+                }
+                queryCheckGroup = (string)null;
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro ao salvar contatos: " + ex.Message);
+            }
+            finally
+            {
+                this.connection.Close();
+            }
+        }
+
+        private async Task PreencherCheckListBoxComGruposAsync()
+        {
+            try
+            {
+                this.clbGrupoDeContado.Items.Clear();
+                this.InitializeDB();
+                string query = "SELECT NomeGrupo FROM GruposContatos WHERE IdCredencial = @IdCredencial";
+                using (MySqlCommand command = new MySqlCommand(query, this.connection))
+                {
+                    command.Parameters.AddWithValue("@IdCredencial", (object)this.idCredencial);
+                    DbDataReader dbDataReader = await command.ExecuteReaderAsync();
+                    MySqlDataReader reader = (MySqlDataReader)dbDataReader;
+                    dbDataReader = (DbDataReader)null;
+                    try
+                    {
+                        while (reader.Read())
                         {
-                            File.Delete(caminhoArquivo);
-                            MessageBox.Show($"Arquivo '{nomeArquivo}' excluído com sucesso.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show($"Erro ao excluir arquivo '{nomeArquivo}': {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            string nomeGrupo = reader.GetString("NomeGrupo");
+                            this.clbGrupoDeContado.Items.Add((object)nomeGrupo);
+                            nomeGrupo = (string)null;
                         }
                     }
-                    else
+                    finally
                     {
-                        MessageBox.Show($"Arquivo '{nomeArquivo}' não encontrado.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        reader?.Dispose();
+                    }
+                    reader = (MySqlDataReader)null;
+                }
+                query = (string)null;
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro ao preencher CheckListBox com grupos: " + ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+            }
+            finally
+            {
+                this.connection.Close();
+            }
+        }
+
+        private async void cbImportContatosDeGrupo_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                int verificaContatoDuplo = 0;
+
+                foreach (string nomeGrupo in clbGrupoDeContado.CheckedItems)
+                {
+                    InitializeDB();
+
+                    string query = @"SELECT NomeContato 
+                             FROM Contatos 
+                             INNER JOIN GruposContatos 
+                             ON Contatos.IdGrupo = GruposContatos.IdGrupo 
+                             WHERE GruposContatos.NomeGrupo = @NomeGrupo 
+                             AND GruposContatos.IdCredencial = @IdCredencial";
+
+                    using (MySqlCommand command = new MySqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@NomeGrupo", nomeGrupo);
+                        command.Parameters.AddWithValue("@IdCredencial", idCredencial);
+
+                        using (DbDataReader dbDataReader = await command.ExecuteReaderAsync())
+                        {
+                            while (dbDataReader.Read())
+                            {
+                                string contatoCriptografado = dbDataReader.GetString("NomeContato");
+                                string contatoDescriptografado = Criptografias.Descriptografar(contatoCriptografado);
+
+                                if (!clbContatos.Items.Cast<string>().Any(item => item == contatoDescriptografado))
+                                {
+                                    clbContatos.Items.Add(contatoDescriptografado, true);
+                                }
+                                else
+                                {
+                                    verificaContatoDuplo++;
+                                    clbContatos.Items.Add(contatoDescriptografado, false);
+                                }
+                            }
+                        }
                     }
                 }
-                PreencherCheckListBoxComArquivos();
+
+                if (verificaContatoDuplo > 0)
+                {
+                    MessageBox.Show($"Há {verificaContatoDuplo} contatos já existentes adicionados sem marcação");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erro ao importar contatos dos grupos: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                connection.Close();
+            }
+        }
+
+
+        private async void cbExcluirGrupoSelect_Click(object sender, EventArgs e)
+        {
+            await this.ExcluirGruposSelecionadosAsync();
+        }
+
+        private async Task ExcluirGruposSelecionadosAsync()
+        {
+            try
+            {
+                DialogResult result = MessageBox.Show("Tem certeza que deseja excluir o(s) Grupo(s) selecionado(s)?", "Confirmação", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result != DialogResult.Yes)
+                    return;
+                this.InitializeDB();
+                foreach (string nomeGrupo in this.clbGrupoDeContado.CheckedItems)
+                {
+                    string queryGetGroupId = "SELECT IdGrupo FROM GruposContatos WHERE NomeGrupo = @NomeGrupo AND IdCredencial = @IdCredencial";
+                    int idGrupo;
+                    using (MySqlCommand command = new MySqlCommand(queryGetGroupId, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@NomeGrupo", (object)nomeGrupo);
+                        command.Parameters.AddWithValue("@IdCredencial", (object)this.idCredencial);
+                        object obj = await command.ExecuteScalarAsync();
+                        idGrupo = Convert.ToInt32(obj);
+                        obj = (object)null;
+                    }
+                    string queryDeleteContatos = "DELETE FROM Contatos WHERE IdGrupo = @IdGrupo";
+                    using (MySqlCommand command = new MySqlCommand(queryDeleteContatos, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@IdGrupo", (object)idGrupo);
+                        int num = await command.ExecuteNonQueryAsync();
+                    }
+                    string queryDeleteGrupo = "DELETE FROM GruposContatos WHERE IdGrupo = @IdGrupo";
+                    using (MySqlCommand command = new MySqlCommand(queryDeleteGrupo, this.connection))
+                    {
+                        command.Parameters.AddWithValue("@IdGrupo", (object)idGrupo);
+                        int num = await command.ExecuteNonQueryAsync();
+                    }
+                    int num1 = (int)MessageBox.Show("Grupo '" + nomeGrupo + "' e todos os contatos associados foram excluídos com sucesso.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+                    queryGetGroupId = (string)null;
+                    queryDeleteContatos = (string)null;
+                    queryDeleteGrupo = (string)null;
+                }
+                await this.PreencherCheckListBoxComGruposAsync();
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro ao excluir grupos selecionados: " + ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+            }
+            finally
+            {
+                this.connection.Close();
             }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            Properties.Settings.Default.sessao = tbSessionId.Text;
-            Properties.Settings.Default.apiKey = tbApiKey.Text;
-            Properties.Settings.Default.Save();
+            try
+            {
+                Settings.Default.Save();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
-        private async void cbAddImagem_Click(object sender, EventArgs e)
+        private void cbAddImagem_Click(object sender, EventArgs e)
         {
-            DadosImagemAnexo ImagemEmAnexo = AnexarImagemMedia();
-            if (ImagemEmAnexo.Base64Image != null)
+            try
             {
-                LabelCampoMensagemUp.Text = "Mensagem com Anexo:   >>>   " + imagemEmAnexo.NameFile;
-                pbAnexado.Visible = true;
+                DadosImagemAnexo dadosImagemAnexo = this.AnexarImagemMedia();
+                if (dadosImagemAnexo.Base64Image != null)
+                {
+                    string str = this.FormatFileSize(new FileInfo(dadosImagemAnexo.ImagePath).Length);
+                    Label labelCampoMensagemUp = this.LabelCampoMensagemUp;
+                    DefaultInterpolatedStringHandler interpolatedStringHandler = new DefaultInterpolatedStringHandler(31, 2);
+                    interpolatedStringHandler.AppendLiteral("Mensagem com Anexo:   >>>   ");
+                    interpolatedStringHandler.AppendFormatted(dadosImagemAnexo.NameFile);
+                    interpolatedStringHandler.AppendLiteral(" (");
+                    interpolatedStringHandler.AppendFormatted(str);
+                    interpolatedStringHandler.AppendLiteral(")");
+                    string stringAndClear = interpolatedStringHandler.ToStringAndClear();
+                    labelCampoMensagemUp.Text = stringAndClear;
+                    this.pbAnexado.Visible = true;
+                }
+                else
+                {
+                    this.LabelCampoMensagemUp.Text = "Mensagem:";
+                    this.pbAnexado.Visible = false;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                LabelCampoMensagemUp.Text = "Mensagem:";
-                pbAnexado.Visible = false;
+                throw;
             }
         }
 
         private DadosImagemAnexo AnexarImagemMedia()
         {
-            // Abre o diálogo para selecionar o arquivo de imagem
-            using (OpenFileDialog openFileDialog = new OpenFileDialog())
+            try
             {
-                openFileDialog.Filter = "Arquivos de Imagem|*.jpg;*.jpeg;*.png;*.gif";
-                openFileDialog.Title = "Selecione uma imagem";
-
-                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                using (OpenFileDialog openFileDialog = new OpenFileDialog())
                 {
-                    imagemEmAnexo.ImagePath = openFileDialog.FileName;
-
-                    // Lê os dados do arquivo da imagem
-                    imagemEmAnexo.ImageBytes = File.ReadAllBytes(imagemEmAnexo.ImagePath);
-                    imagemEmAnexo.Base64Image = Convert.ToBase64String(imagemEmAnexo.ImageBytes);
-                    imagemEmAnexo.NameFile = openFileDialog.SafeFileName.ToString();
+                    if (openFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        this.imagemEmAnexo.ImagePath = openFileDialog.FileName;
+                        this.imagemEmAnexo.ImageBytes = File.ReadAllBytes(this.imagemEmAnexo.ImagePath);
+                        this.imagemEmAnexo.Base64Image = Convert.ToBase64String(this.imagemEmAnexo.ImageBytes);
+                        this.imagemEmAnexo.NameFile = openFileDialog.SafeFileName.ToString();
+                    }
                 }
-
+                return this.imagemEmAnexo;
             }
-
-            return imagemEmAnexo;
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
-        private void AcrescentarStringEmLinhaEspecifica(ListBox listBox, string novaString, int indexLinha)
+        private string FormatFileSize(long fileSizeInBytes)
         {
-            if (indexLinha >= 0 && indexLinha <= listBox.Items.Count)
+            double num1 = (double)fileSizeInBytes;
+            if (num1 >= 1024.0)
             {
-                if (listBox.InvokeRequired)
+                double num2 = num1 / 1024.0;
+                if (num2 >= 1024.0)
                 {
-                    listBox.BeginInvoke((MethodInvoker)(() =>
-                    {
-                        labelProcessandoMsg.Visible = true;
-                        if (indexLinha == listBox.Items.Count || string.IsNullOrEmpty(listBox.Items[indexLinha]?.ToString()))
-                        {
-                            // Se o índice da linha especificada for igual ao número total de itens
-                            // ou se a linha estiver vazia, acrescenta a nova string como um novo item na ListBox
-                            listBox.Items.Insert(indexLinha, novaString);
-                        }
-                        else
-                        {
-                            // Recupera o conteúdo da linha especificada
-                            string linhaAtual = listBox.Items[indexLinha].ToString();
-
-                            // Acrescenta a nova string na frente do conteúdo existente
-                            linhaAtual = linhaAtual + " " + novaString;
-
-                            // Atualiza a linha na ListBox
-                            listBox.Items[indexLinha] = linhaAtual;
-                        }
-                    }));
+                    double num3 = num2 / 1024.0;
+                    DefaultInterpolatedStringHandler interpolatedStringHandler = new DefaultInterpolatedStringHandler(3, 1);
+                    interpolatedStringHandler.AppendFormatted<double>(num3, "N1");
+                    interpolatedStringHandler.AppendLiteral(" MB");
+                    return interpolatedStringHandler.ToStringAndClear();
                 }
-                else
+                DefaultInterpolatedStringHandler interpolatedStringHandler1 = new DefaultInterpolatedStringHandler(3, 1);
+                interpolatedStringHandler1.AppendFormatted<double>(num2, "N1");
+                interpolatedStringHandler1.AppendLiteral(" KB");
+                return interpolatedStringHandler1.ToStringAndClear();
+            }
+            DefaultInterpolatedStringHandler interpolatedStringHandler2 = new DefaultInterpolatedStringHandler(6, 1);
+            interpolatedStringHandler2.AppendFormatted<double>(num1);
+            interpolatedStringHandler2.AppendLiteral(" bytes");
+            return interpolatedStringHandler2.ToStringAndClear();
+        }
+
+        private void ExcluirImagem()
+        {
+            try
+            {
+                if (this.imagemEmAnexo == null)
+                    return;
+                this.imagemEmAnexo.ImagePath = (string)null;
+                this.imagemEmAnexo.ImageBytes = (byte[])null;
+                this.imagemEmAnexo.Base64Image = (string)null;
+                this.imagemEmAnexo.NameFile = (string)null;
+                this.pbAnexado.Visible = false;
+                this.LabelCampoMensagemUp.Text = "Mensagem:";
+                this.pbQrCode.Visible = false;
+            }
+            catch (Exception ex)
+            {
+                int num = (int)MessageBox.Show("Erro ao excluir imagem: " + ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+            }
+        }
+
+        private void AcrescentarStringEmLinhaEspecifica(
+          ListBox listBox1,
+          string novaString,
+          int indexLinha)
+        {
+            try
+            {
+                if (indexLinha >= 0 && indexLinha <= listBox1.Items.Count)
                 {
-                    labelProcessandoMsg.Visible = true;
-                    if (indexLinha == listBox.Items.Count || string.IsNullOrEmpty(listBox.Items[indexLinha]?.ToString()))
+                    if (listBox1.InvokeRequired)
                     {
-                        // Se o índice da linha especificada for igual ao número total de itens
-                        // ou se a linha estiver vazia, acrescenta a nova string como um novo item na ListBox
-                        listBox.Items.Insert(indexLinha, novaString);
+                        listBox1.BeginInvoke((Delegate)(() =>
+                        {
+                            this.labelProcessandoMsg.Visible = true;
+                            if (indexLinha == this.listView.Items.Count || string.IsNullOrEmpty(this.listView.Items[indexLinha]?.ToString()))
+                                this.listView.Items.Insert(indexLinha, novaString);
+                            else
+                                listBox1.Items[indexLinha] = (object)(listBox1.Items[indexLinha].ToString() + " " + novaString);
+                        }));
                     }
                     else
                     {
-                        // Recupera o conteúdo da linha especificada
-                        string linhaAtual = listBox.Items[indexLinha].ToString();
-
-                        // Acrescenta a nova string na frente do conteúdo existente
-                        linhaAtual = linhaAtual + " " + novaString;
-
-                        // Atualiza a linha na ListBox
-                        listBox.Items[indexLinha] = linhaAtual;
+                        this.labelProcessandoMsg.Visible = true;
+                        if (indexLinha == listBox1.Items.Count || string.IsNullOrEmpty(listBox1.Items[indexLinha]?.ToString()))
+                        {
+                            listBox1.Items.Insert(indexLinha, (object)novaString);
+                        }
+                        else
+                        {
+                            string str = listBox1.Items[indexLinha].ToString() + " " + novaString;
+                            listBox1.Items[indexLinha] = (object)str;
+                        }
                     }
                 }
+                else
+                {
+                    int num = (int)MessageBox.Show("Índice de linha especificado é inválido.");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        private void pbAnexado_MouseEnter(object sender, EventArgs e)
+        {
+            this.pbAnexado.Image = (Image)Resources.Excluir;
+        }
+
+        private void pbAnexado_MouseLeave(object sender, EventArgs e)
+        {
+            this.pbAnexado.Image = (Image)Resources.Anexo;
+        }
+
+        private void pbAnexado_Click(object sender, EventArgs e) => this.ExcluirImagem();
+
+        private void labelResponse_TextChanged(object sender, EventArgs e)
+        {
+            if (this.labelResponse.Text.Contains("Aguardando") || this.labelResponse.Text.Contains("Processando"))
+            {
+                this.pbAguarde.Image = (Image)Resources.Aguarde;
+                this.pbAguarde.Visible = true;
             }
             else
             {
-                // Exibe uma mensagem de erro se o índice da linha especificada for inválido
-                MessageBox.Show("Índice de linha especificado é inválido.");
+                this.pbAguarde.Image = (Image)Resources.CodeCraft;
+                this.pbAguarde.Visible = true;
             }
         }
 
-        private void tbApiKey_TextChanged(object sender, EventArgs e)
+        private void tbNomeContato_KeyPress(object sender, KeyPressEventArgs e)
         {
-            keyValue = tbApiKey.Text;
+            if (e.KeyChar != '\r')
+                return;
+            this.cbAddContato_Click(sender, (EventArgs)e);
         }
     }
 }
-
