@@ -1,3 +1,7 @@
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Drawing.Charts;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
 using ListaDeTransmissaoWhatsApi.Models;
 using ListaDeTransmissaoWhatsApi.Properties;
 using MySql.Data.MySqlClient;
@@ -109,7 +113,7 @@ namespace ListaDeTransmissaoWhatsApi
                                 this.cbAdministração.Visible = true;
                                 this.cbAdministração.Enabled = true;
                             }
-                            Application.DoEvents();
+                            System.Windows.Forms.Application.DoEvents();
                             if (!string.IsNullOrEmpty(this.keyValue))
                             {
                                 string str = await this.PingSystem();
@@ -158,7 +162,7 @@ namespace ListaDeTransmissaoWhatsApi
                 }
                 else
                     this.labelResponse.Text = "Sem Dados de Sucesso";
-                Application.DoEvents();
+                System.Windows.Forms.Application.DoEvents();
             }
             catch (Exception ex)
             {
@@ -540,7 +544,7 @@ namespace ListaDeTransmissaoWhatsApi
                 this.labelResponse.Text = "Processando...";
                 this.pbQrCode.Visible = false;
                 this.cbRefreshQrCode.Visible = false;
-                Application.DoEvents();
+                System.Windows.Forms.Application.DoEvents();
             }
             catch (Exception ex)
             {
@@ -574,7 +578,7 @@ namespace ListaDeTransmissaoWhatsApi
         {
             try
             {
-                TextBox textBox = sender as TextBox;
+                System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
                 if (!(textBox.Text != ""))
                     return;
                 if (textBox.Text.Length != 13)
@@ -595,7 +599,7 @@ namespace ListaDeTransmissaoWhatsApi
         {
             try
             {
-                TextBox textBox = sender as TextBox;
+                System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
                 string str = new string(textBox.Text.Where<char>((Func<char, bool>)(c => char.IsDigit(c))).ToArray<char>());
                 if (str.Length > 0)
                 {
@@ -633,11 +637,11 @@ namespace ListaDeTransmissaoWhatsApi
             {
                 if (this.tbNomeContato.Text != "" && this.tbNumeroContato.Text != "")
                 {
-                    string contatoWhatsapp = await this.FormatarNumeroWhatsApp(this.tbNumeroContato.Text);
+                    string contatoWhatsapp = await FormatarNumeroWhatsApp(tbNumeroContato.Text);
                     if (contatoWhatsapp != null)
                     {
                         this.clbContatos.Items.Add((object)(contatoWhatsapp + "; " + this.tbNomeContato.Text), true);
-                        foreach (object item in (ListBox.ObjectCollection)this.clbContatos.Items)
+                        foreach (object item in (System.Windows.Forms.ListBox.ObjectCollection)this.clbContatos.Items)
                         {
                             this.tbNomeContato.Clear();
                             this.tbNumeroContato.Clear();
@@ -666,6 +670,13 @@ namespace ListaDeTransmissaoWhatsApi
             try
             {
                 string numeroLimpo = Regex.Replace(telefone, "[^0-9]", "");
+
+                // Verifica se o número já começa com "55"
+                if (!numeroLimpo.StartsWith("55"))
+                {
+                    numeroLimpo = "55" + numeroLimpo;
+                }
+
                 RestClientOptions options = new RestClientOptions(this.host)
                 {
                     MaxTimeout = 1000
@@ -674,7 +685,7 @@ namespace ListaDeTransmissaoWhatsApi
                 RestRequest request = new RestRequest("/client/getNumberId/" + this.sessionId, Method.Post);
                 request.AddHeader(this.keyName, this.keyValue);
                 request.AddHeader("Content-Type", "application/json");
-                string body = "{\r\n\n  \"number\": \"55" + numeroLimpo + "\"\r\n\n}";
+                string body = "{\r\n\n  \"number\": \"" + numeroLimpo + "\"\r\n\n}";
                 request.AddStringBody(body, DataFormat.Json);
                 RestResponse response = await client.ExecuteAsync(request, new CancellationToken());
                 WhatsNumeroId responseData = JsonConvert.DeserializeObject<WhatsNumeroId>(response.Content);
@@ -769,7 +780,7 @@ namespace ListaDeTransmissaoWhatsApi
             try
             {
                 this.LabelServidor.Text = "Conectando";
-                this.LabelServidor.BackColor = Color.FromArgb((int)byte.MaxValue, 240, 240, 240);
+                this.LabelServidor.BackColor = System.Drawing.Color.FromArgb((int)byte.MaxValue, 240, 240, 240);
                 string str = await this.PingSystem();
             }
             catch (Exception ex)
@@ -796,10 +807,10 @@ namespace ListaDeTransmissaoWhatsApi
                 if (responseData.Success)
                 {
                     this.LabelServidor.Text = "Servidor: Conectado";
-                    this.LabelServidor.BackColor = Color.YellowGreen;
+                    this.LabelServidor.BackColor = System.Drawing.Color.YellowGreen;
                     this.cbConnectar.Visible = false;
                     this.AtivaStatusPeloServidorApp(true);
-                    Application.DoEvents();
+                    System.Windows.Forms.Application.DoEvents();
                     return responseData.Message;
                 }
                 if (!responseData.Success)
@@ -807,29 +818,29 @@ namespace ListaDeTransmissaoWhatsApi
                     if (responseData.Error != null)
                     {
                         this.LabelServidor.Text = "Falha" + Environment.NewLine + responseData.Error;
-                        this.LabelServidor.BackColor = Color.IndianRed;
+                        this.LabelServidor.BackColor = System.Drawing.Color.IndianRed;
                         this.cbConnectar.Visible = true;
-                        Application.DoEvents();
+                        System.Windows.Forms.Application.DoEvents();
                         return responseData.Error;
                     }
                     this.LabelServidor.Text = "Falha" + Environment.NewLine + responseData.Message;
                     this.AtivaStatusPeloServidorApp(false);
-                    Application.DoEvents();
+                    System.Windows.Forms.Application.DoEvents();
                     return responseData.Message;
                 }
                 this.LabelServidor.Text = "Sem Dados de Sucesso";
-                this.LabelServidor.BackColor = Color.IndianRed;
+                this.LabelServidor.BackColor = System.Drawing.Color.IndianRed;
                 this.cbConnectar.Visible = true;
                 this.AtivaStatusPeloServidorApp(false);
-                Application.DoEvents();
+                System.Windows.Forms.Application.DoEvents();
                 return "Sem Dados de Sucesso";
             }
             catch (Exception ex)
             {
                 this.LabelServidor.Text = "Servidor OFFLINE";
-                this.LabelServidor.BackColor = Color.IndianRed;
+                this.LabelServidor.BackColor = System.Drawing.Color.IndianRed;
                 this.AtivaStatusPeloServidorApp(false);
-                Application.DoEvents();
+                System.Windows.Forms.Application.DoEvents();
                 return "Sem Dados de Sucesso";
             }
         }
@@ -1219,7 +1230,7 @@ namespace ListaDeTransmissaoWhatsApi
                 if (dadosImagemAnexo.Base64Image != null)
                 {
                     string str = this.FormatFileSize(new FileInfo(dadosImagemAnexo.ImagePath).Length);
-                    Label labelCampoMensagemUp = this.LabelCampoMensagemUp;
+                    System.Windows.Forms.Label labelCampoMensagemUp = this.LabelCampoMensagemUp;
                     DefaultInterpolatedStringHandler interpolatedStringHandler = new DefaultInterpolatedStringHandler(31, 2);
                     interpolatedStringHandler.AppendLiteral("Mensagem com Anexo:   >>>   ");
                     interpolatedStringHandler.AppendFormatted(dadosImagemAnexo.NameFile);
@@ -1310,7 +1321,7 @@ namespace ListaDeTransmissaoWhatsApi
         }
 
         private void AcrescentarStringEmLinhaEspecifica(
-          ListBox listBox1,
+          System.Windows.Forms.ListBox listBox1,
           string novaString,
           int indexLinha)
         {
@@ -1386,5 +1397,112 @@ namespace ListaDeTransmissaoWhatsApi
                 return;
             this.cbAddContato_Click(sender, (EventArgs)e);
         }
+
+        private async void cbImportarContatosDeArquivos_ClickAsync(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "Excel Files|*.xlsx";
+            openFileDialog.Title = "Selecione um arquivo do Excel";
+            string importResult = "Contatos Não Importados: ";
+            Processando();
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string fileName = openFileDialog.FileName;
+
+                using (SpreadsheetDocument spreadsheetDocument = SpreadsheetDocument.Open(fileName, false))
+                {
+                    WorkbookPart workbookPart = spreadsheetDocument.WorkbookPart;
+                    Sheet sheet = workbookPart.Workbook.Sheets.GetFirstChild<Sheet>();
+                    WorksheetPart worksheetPart = (WorksheetPart)workbookPart.GetPartById(sheet.Id);
+                    bool primeiraLinha = true; // Variável para controlar se é a primeira linha do arquivo
+
+                    OpenXmlReader reader = OpenXmlReader.Create(worksheetPart);
+                    while (reader.Read())
+                    {
+                        if (reader.ElementType == typeof(Row))
+                        {
+                            Row row = (Row)reader.LoadCurrentElement();
+                            if (primeiraLinha)
+                            {
+                                primeiraLinha = false;
+                                continue;
+                            }
+                            Cell? cell = row.GetFirstChild<Cell>();
+                            Cell? cell2 = row.Elements<Cell>().ElementAtOrDefault(1);
+                            Cell? cell3 = row.Elements<Cell>().ElementAtOrDefault(4);
+                            Cell? cell6 = row.Elements<Cell>().ElementAtOrDefault(6);
+                            Cell? cell7 = row.Elements<Cell>().ElementAtOrDefault(7);
+                            Cell? cell8 = row.Elements<Cell>().ElementAtOrDefault(8);
+                            Cell? cell9 = row.Elements<Cell>().ElementAtOrDefault(9);
+                        
+
+                            // Verifica se a célula não é nula e se contém um valor
+                            if (cell != null && cell.CellValue != null)
+                            {
+                                string? value = cell.CellValue.InnerText;
+                                string? value2 = cell2.CellValue.InnerText;
+                                string? value3 = cell3.CellValue.InnerText;
+                                //string? value6 = cell6.CellValue.InnerText;
+                                //string? value7 = cell7.CellValue.InnerText;
+                                //string? value8 = cell8.CellValue.InnerText;
+                                //string? value9 = cell9.CellValue.InnerText;
+
+                                // Extrai somente os números do valor da célula
+                                string numericValue = new string(value.Where(char.IsDigit).ToArray());
+                                string contatoNome;
+
+                                try
+                                {
+                                    contatoNome = value2.Substring(0, value2.IndexOf("- ")) + value3;
+                                }
+                                catch
+                                {
+
+                                    contatoNome = value2;
+                                }
+                                
+
+                                string contatoWhatsapp;
+                                if (numericValue != null && Regex.IsMatch(numericValue, @"^\d+$") && numericValue != "")
+                                {
+                                    contatoWhatsapp = await FormatarNumeroWhatsApp(numericValue);
+                                    if (contatoWhatsapp != null)
+                                    {
+                                        clbContatos.Items.Add((object)(contatoWhatsapp + "; " + contatoNome), true);
+                                        clbContatos.TopIndex = clbContatos.Items.Count - 1;
+                                        labelContCheckBox.Text = clbContatos.Items.Count.ToString();
+                                        foreach (object item in (System.Windows.Forms.ListBox.ObjectCollection)this.clbContatos.Items)
+                                        {
+                                            this.tbNomeContato.Clear();
+                                            this.tbNumeroContato.Clear();
+                                            this.tbNumeroContato.Focus();
+                                        }
+                                        
+                                    }
+                                    else
+                                    {
+                                        importResult += $"\n{contatoNome} Sem Whatsapp";
+                                    }
+                                    
+                                }
+                                else
+                                {
+                                    importResult += $"\n{contatoNome} Sem Whatsapp";
+                                }
+                                contatoWhatsapp = (string)null;
+
+
+
+                            }
+                        }
+                    }
+                    labelResponse.Text = ("Concluido");
+                    int num = (int)MessageBox.Show(importResult,"Importados" , MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+                }
+            }
+        }
+
     }
 }
