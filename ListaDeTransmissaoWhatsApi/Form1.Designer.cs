@@ -31,6 +31,7 @@ namespace ListaDeTransmissaoWhatsApi
         /// </summary>
         private void InitializeComponent()
         {
+            ComponentResourceManager resources = new ComponentResourceManager(typeof(Form1));
             cbIniciarsessao = new Button();
             tbCampoMessage = new TextBox();
             cbEncerraSessao = new Button();
@@ -502,6 +503,7 @@ namespace ListaDeTransmissaoWhatsApi
             Controls.Add(cbEncerraSessao);
             Controls.Add(tbCampoMessage);
             Controls.Add(cbIniciarsessao);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "Form1";
             Text = "Lista De Transmissão";
             FormClosing += Form1_FormClosing;
