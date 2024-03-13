@@ -31,6 +31,7 @@ namespace ListaDeTransmissaoWhatsApi
         /// </summary>
         private void InitializeComponent()
         {
+            ComponentResourceManager resources = new ComponentResourceManager(typeof(Form1));
             cbIniciarsessao = new Button();
             tbCampoMessage = new TextBox();
             cbEncerraSessao = new Button();
@@ -67,6 +68,8 @@ namespace ListaDeTransmissaoWhatsApi
             pbAnexado = new PictureBox();
             pbAguarde = new PictureBox();
             cbAdministração = new Button();
+            cbImportarContatosDeArquivos = new Button();
+            labelContCheckBox = new Label();
             ((ISupportInitialize)pbQrCode).BeginInit();
             ((ISupportInitialize)pbAnexado).BeginInit();
             ((ISupportInitialize)pbAguarde).BeginInit();
@@ -91,7 +94,7 @@ namespace ListaDeTransmissaoWhatsApi
             tbCampoMessage.Multiline = true;
             tbCampoMessage.Name = "tbCampoMessage";
             tbCampoMessage.ScrollBars = ScrollBars.Vertical;
-            tbCampoMessage.Size = new Size(620, 144);
+            tbCampoMessage.Size = new Size(620, 132);
             tbCampoMessage.TabIndex = 16;
             // 
             // cbEncerraSessao
@@ -201,7 +204,7 @@ namespace ListaDeTransmissaoWhatsApi
             // 
             cbAddContato.Location = new Point(30, 438);
             cbAddContato.Name = "cbAddContato";
-            cbAddContato.Size = new Size(66, 23);
+            cbAddContato.Size = new Size(75, 23);
             cbAddContato.TabIndex = 6;
             cbAddContato.Text = "Adicionar";
             cbAddContato.UseVisualStyleBackColor = true;
@@ -226,7 +229,7 @@ namespace ListaDeTransmissaoWhatsApi
             // 
             // cbEnviarMensagem
             // 
-            cbEnviarMensagem.Location = new Point(562, 649);
+            cbEnviarMensagem.Location = new Point(562, 637);
             cbEnviarMensagem.Name = "cbEnviarMensagem";
             cbEnviarMensagem.Size = new Size(88, 27);
             cbEnviarMensagem.TabIndex = 17;
@@ -277,9 +280,9 @@ namespace ListaDeTransmissaoWhatsApi
             // 
             // cbSelectAll
             // 
-            cbSelectAll.Location = new Point(102, 438);
+            cbSelectAll.Location = new Point(111, 438);
             cbSelectAll.Name = "cbSelectAll";
-            cbSelectAll.Size = new Size(46, 23);
+            cbSelectAll.Size = new Size(51, 23);
             cbSelectAll.TabIndex = 8;
             cbSelectAll.Text = "Todos";
             cbSelectAll.UseVisualStyleBackColor = true;
@@ -288,9 +291,9 @@ namespace ListaDeTransmissaoWhatsApi
             // cbExcluir
             // 
             cbExcluir.BackColor = Color.LightCoral;
-            cbExcluir.Location = new Point(154, 438);
+            cbExcluir.Location = new Point(168, 438);
             cbExcluir.Name = "cbExcluir";
-            cbExcluir.Size = new Size(53, 23);
+            cbExcluir.Size = new Size(50, 23);
             cbExcluir.TabIndex = 9;
             cbExcluir.Text = "Excluir";
             cbExcluir.UseVisualStyleBackColor = false;
@@ -325,9 +328,9 @@ namespace ListaDeTransmissaoWhatsApi
             // cbExcluirGrupoSelect
             // 
             cbExcluirGrupoSelect.BackColor = Color.LightCoral;
-            cbExcluirGrupoSelect.Location = new Point(651, 429);
+            cbExcluirGrupoSelect.Location = new Point(718, 381);
             cbExcluirGrupoSelect.Name = "cbExcluirGrupoSelect";
-            cbExcluirGrupoSelect.Size = new Size(106, 51);
+            cbExcluirGrupoSelect.Size = new Size(67, 51);
             cbExcluirGrupoSelect.TabIndex = 15;
             cbExcluirGrupoSelect.Text = "Excluir Grupo";
             cbExcluirGrupoSelect.UseVisualStyleBackColor = false;
@@ -335,9 +338,9 @@ namespace ListaDeTransmissaoWhatsApi
             // 
             // cbImportContatosDeGrupo
             // 
-            cbImportContatosDeGrupo.Location = new Point(651, 372);
+            cbImportContatosDeGrupo.Location = new Point(629, 381);
             cbImportContatosDeGrupo.Name = "cbImportContatosDeGrupo";
-            cbImportContatosDeGrupo.Size = new Size(106, 51);
+            cbImportContatosDeGrupo.Size = new Size(79, 51);
             cbImportContatosDeGrupo.TabIndex = 13;
             cbImportContatosDeGrupo.Text = "Adicionar Contatos";
             cbImportContatosDeGrupo.UseVisualStyleBackColor = true;
@@ -380,7 +383,7 @@ namespace ListaDeTransmissaoWhatsApi
             listBox1.Location = new Point(353, 99);
             listBox1.MultiColumn = true;
             listBox1.Name = "listBox1";
-            listBox1.Size = new Size(221, 285);
+            listBox1.Size = new Size(221, 315);
             listBox1.TabIndex = 53;
             // 
             // labelProcessandoMsg
@@ -405,7 +408,7 @@ namespace ListaDeTransmissaoWhatsApi
             // pbAnexado
             // 
             pbAnexado.Image = Resources.Anexo;
-            pbAnexado.Location = new Point(508, 646);
+            pbAnexado.Location = new Point(508, 634);
             pbAnexado.Name = "pbAnexado";
             pbAnexado.Size = new Size(48, 30);
             pbAnexado.SizeMode = PictureBoxSizeMode.StretchImage;
@@ -438,11 +441,32 @@ namespace ListaDeTransmissaoWhatsApi
             cbAdministração.UseVisualStyleBackColor = false;
             cbAdministração.Visible = false;
             // 
+            // cbImportarContatosDeArquivos
+            // 
+            cbImportarContatosDeArquivos.Location = new Point(457, 438);
+            cbImportarContatosDeArquivos.Name = "cbImportarContatosDeArquivos";
+            cbImportarContatosDeArquivos.Size = new Size(99, 39);
+            cbImportarContatosDeArquivos.TabIndex = 61;
+            cbImportarContatosDeArquivos.Text = "Importar Contatos de Arquivo";
+            cbImportarContatosDeArquivos.UseVisualStyleBackColor = true;
+            cbImportarContatosDeArquivos.Click += cbImportarContatosDeArquivos_ClickAsync;
+            // 
+            // labelContCheckBox
+            // 
+            labelContCheckBox.AutoSize = true;
+            labelContCheckBox.Location = new Point(224, 465);
+            labelContCheckBox.Name = "labelContCheckBox";
+            labelContCheckBox.Size = new Size(12, 15);
+            labelContCheckBox.TabIndex = 62;
+            labelContCheckBox.Text = "_";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(797, 697);
+            ClientSize = new Size(797, 672);
+            Controls.Add(labelContCheckBox);
+            Controls.Add(cbImportarContatosDeArquivos);
             Controls.Add(cbAdministração);
             Controls.Add(pbAguarde);
             Controls.Add(pbAnexado);
@@ -479,6 +503,7 @@ namespace ListaDeTransmissaoWhatsApi
             Controls.Add(cbEncerraSessao);
             Controls.Add(tbCampoMessage);
             Controls.Add(cbIniciarsessao);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "Form1";
             Text = "Lista De Transmissão";
             FormClosing += Form1_FormClosing;
@@ -529,5 +554,7 @@ namespace ListaDeTransmissaoWhatsApi
         private PictureBox pbAguarde;
         private ListView listView;
         private Button cbAdministração;
+        private Button cbImportarContatosDeArquivos;
+        private Label labelContCheckBox;
     }
 }

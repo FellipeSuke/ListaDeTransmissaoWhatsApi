@@ -101,6 +101,16 @@ namespace ListaDeTransmissaoWhatsApi.Properties {
         }
         
         /// <summary>
+        ///   Consulta um recurso localizado do tipo System.Drawing.Icon semelhante a (Ícone).
+        /// </summary>
+        internal static System.Drawing.Icon CodeCraftIcone1 {
+            get {
+                object obj = ResourceManager.GetObject("CodeCraftIcone1", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
         ///   Consulta um recurso localizado do tipo System.Drawing.Bitmap.
         /// </summary>
         internal static System.Drawing.Bitmap Excluir {

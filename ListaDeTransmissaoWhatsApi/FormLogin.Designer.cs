@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FormLogin));
             cbLogin = new Button();
             checkBoxLembrar = new CheckBox();
             tbUsuario = new TextBox();
@@ -126,6 +127,7 @@
             Controls.Add(tbUsuario);
             Controls.Add(checkBoxLembrar);
             Controls.Add(cbLogin);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "FormLogin";
             SizeGripStyle = SizeGripStyle.Show;
             Text = "FormLogin";
