@@ -1,5 +1,4 @@
 using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Drawing.Charts;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ListaDeTransmissaoWhatsApi.Models;
@@ -7,19 +6,10 @@ using ListaDeTransmissaoWhatsApi.Properties;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using RestSharp;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
-using System.Drawing;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 #nullable enable
 namespace ListaDeTransmissaoWhatsApi
@@ -36,6 +26,7 @@ namespace ListaDeTransmissaoWhatsApi
         public string host;
         public string sessionId;
         public string privilegios;
+        string fileName;
         private DadosImagemAnexo imagemEmAnexo = new DadosImagemAnexo();
         private MySqlConnection connection;
         private const string server = "apisuke.ddns.net";
@@ -1398,17 +1389,22 @@ namespace ListaDeTransmissaoWhatsApi
             this.cbAddContato_Click(sender, (EventArgs)e);
         }
 
-        private async void cbImportarContatosDeArquivos_ClickAsync(object sender, EventArgs e)
+        private string? GetCellValue(Cell cell)
+        {
+            return cell?.CellValue?.InnerText;
+        }
+
+        private void cbImportarContatosDeArquivos_ClickAsync(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "Excel Files|*.xlsx";
             openFileDialog.Title = "Selecione um arquivo do Excel";
-            string importResult = "Contatos Não Importados: ";
             Processando();
+            clbFiltersImport.Items.Clear();
 
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                string fileName = openFileDialog.FileName;
+                fileName = openFileDialog.FileName;
 
                 using (SpreadsheetDocument spreadsheetDocument = SpreadsheetDocument.Open(fileName, false))
                 {
@@ -1435,74 +1431,185 @@ namespace ListaDeTransmissaoWhatsApi
                             Cell? cell7 = row.Elements<Cell>().ElementAtOrDefault(7);
                             Cell? cell8 = row.Elements<Cell>().ElementAtOrDefault(8);
                             Cell? cell9 = row.Elements<Cell>().ElementAtOrDefault(9);
-                        
+
 
                             // Verifica se a célula não é nula e se contém um valor
-                            if (cell != null && cell.CellValue != null)
+                            // Uso do método auxiliar para obter os valores das células
+                            string? value = GetCellValue(cell);
+                            string? value2 = GetCellValue(cell2);
+                            string? value3 = GetCellValue(cell3);
+                            string? value6 = GetCellValue(cell6);
+                            string? value7 = GetCellValue(cell7);
+                            string? value8 = GetCellValue(cell8);
+                            string? value9 = GetCellValue(cell9);
+
+                            // Limpa os itens anteriores da CheckListBox
+
+
+                            // Valores das células
+                            string[] values = { value6, value7, value8, value9 };
+
+                            // Adiciona os valores únicos à CheckListBox
+                            foreach (string filter in values)
                             {
-                                string? value = cell.CellValue.InnerText;
-                                string? value2 = cell2.CellValue.InnerText;
-                                string? value3 = cell3.CellValue.InnerText;
-                                //string? value6 = cell6.CellValue.InnerText;
-                                //string? value7 = cell7.CellValue.InnerText;
-                                //string? value8 = cell8.CellValue.InnerText;
-                                //string? value9 = cell9.CellValue.InnerText;
-
-                                // Extrai somente os números do valor da célula
-                                string numericValue = new string(value.Where(char.IsDigit).ToArray());
-                                string contatoNome;
-
-                                try
+                                if (!string.IsNullOrEmpty(filter) && !clbFiltersImport.Items.Contains(filter))
                                 {
-                                    contatoNome = value2.Substring(0, value2.IndexOf("- ")) + value3;
+                                    clbFiltersImport.Items.Add(filter);
+                                    System.Windows.Forms.Application.DoEvents();
                                 }
-                                catch
-                                {
-
-                                    contatoNome = value2;
-                                }
-                                
-
-                                string contatoWhatsapp;
-                                if (numericValue != null && Regex.IsMatch(numericValue, @"^\d+$") && numericValue != "")
-                                {
-                                    contatoWhatsapp = await FormatarNumeroWhatsApp(numericValue);
-                                    if (contatoWhatsapp != null)
-                                    {
-                                        clbContatos.Items.Add((object)(contatoWhatsapp + "; " + contatoNome), true);
-                                        clbContatos.TopIndex = clbContatos.Items.Count - 1;
-                                        labelContCheckBox.Text = clbContatos.Items.Count.ToString();
-                                        foreach (object item in (System.Windows.Forms.ListBox.ObjectCollection)this.clbContatos.Items)
-                                        {
-                                            this.tbNomeContato.Clear();
-                                            this.tbNumeroContato.Clear();
-                                            this.tbNumeroContato.Focus();
-                                        }
-                                        
-                                    }
-                                    else
-                                    {
-                                        importResult += $"\n{contatoNome} Sem Whatsapp";
-                                    }
-                                    
-                                }
-                                else
-                                {
-                                    importResult += $"\n{contatoNome} Sem Whatsapp";
-                                }
-                                contatoWhatsapp = (string)null;
-
-
-
                             }
+
+
+
                         }
                     }
                     labelResponse.Text = ("Concluido");
-                    int num = (int)MessageBox.Show(importResult,"Importados" , MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (fileName != null)
+                    {
+                        cbAddPorFiltrosImport.Enabled = true;
+                        cbAddPorFiltrosImport.Visible = true;
+                        clbFiltersImport.Enabled = true;
+                        clbFiltersImport.Visible = true;
+                    }
+
 
                 }
             }
         }
 
+        private async void cbAddPorFiltrosImport_Click(object sender, EventArgs e)
+        {
+            string importResult = "Contatos Não Importados: ";
+            Processando();
+
+            using (SpreadsheetDocument spreadsheetDocument = SpreadsheetDocument.Open(fileName, false))
+            {
+                WorkbookPart workbookPart2 = spreadsheetDocument.WorkbookPart;
+                Sheet sheet2 = workbookPart2.Workbook.Sheets.GetFirstChild<Sheet>();
+                WorksheetPart worksheetPart2 = (WorksheetPart)workbookPart2.GetPartById(sheet2.Id);
+                bool primeiraLinha2 = true; // Variável para controlar se é a primeira linha do arquivo
+                OpenXmlReader reader = OpenXmlReader.Create(worksheetPart2);
+                while (reader.Read())
+                {
+                    if (reader.ElementType == typeof(Row))
+                    {
+                        Row row = (Row)reader.LoadCurrentElement();
+                        if (primeiraLinha2)
+                        {
+                            primeiraLinha2 = false;
+                            continue;
+                        }
+                        Cell? cell = row.GetFirstChild<Cell>();
+                        Cell? cell2 = row.Elements<Cell>().ElementAtOrDefault(1);
+                        Cell? cell3 = row.Elements<Cell>().ElementAtOrDefault(4);
+                        Cell? cell6 = row.Elements<Cell>().ElementAtOrDefault(6);
+                        Cell? cell7 = row.Elements<Cell>().ElementAtOrDefault(7);
+                        Cell? cell8 = row.Elements<Cell>().ElementAtOrDefault(8);
+                        Cell? cell9 = row.Elements<Cell>().ElementAtOrDefault(9);
+
+
+                        // Verifica se a célula não é nula e se contém um valor
+                        // Uso do método auxiliar para obter os valores das células
+                        string? value = GetCellValue(cell);
+                        string? value2 = GetCellValue(cell2);
+                        string? value3 = GetCellValue(cell3);
+                        string? value6 = GetCellValue(cell6);
+                        string? value7 = GetCellValue(cell7);
+                        string? value8 = GetCellValue(cell8);
+                        string? value9 = GetCellValue(cell9);
+
+                        //Extrai somente os números do valor da célula
+                        string numericValue = "";
+                        string contatoNome;
+
+                        try
+                        {
+                            numericValue = new string(value.Where(char.IsDigit).ToArray());
+                            contatoNome = value2.Substring(0, value2.IndexOf("- ")) + value3;
+                        }
+                        catch
+                        {
+
+                            contatoNome = "";
+                        }
+
+
+                        string contatoWhatsapp;
+                        foreach (string filterSelected in clbFiltersImport.CheckedItems)
+                        {
+                            // Verifica se o filtro selecionado está presente nas células 6, 7, 8 ou 9
+                            if (filterSelected == value6 || filterSelected == value7 || filterSelected == value8 || filterSelected == value9)
+                            {
+                                if (numericValue != null && Regex.IsMatch(numericValue, @"^\d+$") && numericValue != "")
+                                {
+                                    contatoWhatsapp = await FormatarNumeroWhatsApp(numericValue);
+
+
+
+                                    if (!clbContatos.Items.Cast<string>().Any(item => item == contatoWhatsapp + "; " + contatoNome))
+
+                                    {
+                                        if (contatoWhatsapp != null)
+                                        {
+
+                                            clbContatos.Items.Add((object)(contatoWhatsapp + "; " + contatoNome), true);
+                                            clbContatos.TopIndex = clbContatos.Items.Count - 1;
+                                            labelContCheckBox.Text = clbContatos.Items.Count.ToString();
+                                            foreach (object item in (System.Windows.Forms.ListBox.ObjectCollection)this.clbContatos.Items)
+                                            {
+                                                this.tbNomeContato.Clear();
+                                                this.tbNumeroContato.Clear();
+                                                this.tbNumeroContato.Focus();
+                                                System.Windows.Forms.Application.DoEvents();
+                                            }
+
+
+                                        }
+                                        else
+                                        {
+                                            importResult += $"\n{contatoNome} Sem Whatsapp";
+                                        }
+                                    }
+                                    else
+                                    {
+
+                                        clbContatos.Items.Add((object)(contatoWhatsapp + "; " + contatoNome), false);
+                                        clbContatos.TopIndex = clbContatos.Items.Count - 1;
+                                        labelContCheckBox.Text = clbContatos.Items.Count.ToString();
+                                    }
+                                }
+                                else
+                                {
+                                    importResult += $"\n{contatoNome} Sem Whatsapp";
+                                }
+                            }
+                        }
+                    }
+                }
+                labelResponse.Text = ("Concluido");
+
+                cbAddPorFiltrosImport.Enabled = false;
+                cbAddPorFiltrosImport.Visible = false;
+                clbFiltersImport.Enabled = false;
+                clbFiltersImport.Visible = false;
+
+
+                // Divide a string em linhas usando a quebra de linha como delimitador
+                string[] linhas = importResult.Split("\n", StringSplitOptions.None);
+
+                // Verifica se há mais de uma linha
+                if (linhas.Length > 1)
+                {
+                    MessageBox.Show(importResult, "Importados", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                else
+                {
+                    MessageBox.Show("Concluido com Sucesso", "Importados", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+
+
+            }
+
+        }
     }
 }

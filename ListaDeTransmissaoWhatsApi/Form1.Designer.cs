@@ -70,6 +70,8 @@ namespace ListaDeTransmissaoWhatsApi
             cbAdministração = new Button();
             cbImportarContatosDeArquivos = new Button();
             labelContCheckBox = new Label();
+            clbFiltersImport = new CheckedListBox();
+            cbAddPorFiltrosImport = new Button();
             ((ISupportInitialize)pbQrCode).BeginInit();
             ((ISupportInitialize)pbAnexado).BeginInit();
             ((ISupportInitialize)pbAguarde).BeginInit();
@@ -445,7 +447,7 @@ namespace ListaDeTransmissaoWhatsApi
             // 
             cbImportarContatosDeArquivos.Location = new Point(457, 438);
             cbImportarContatosDeArquivos.Name = "cbImportarContatosDeArquivos";
-            cbImportarContatosDeArquivos.Size = new Size(99, 39);
+            cbImportarContatosDeArquivos.Size = new Size(117, 39);
             cbImportarContatosDeArquivos.TabIndex = 61;
             cbImportarContatosDeArquivos.Text = "Importar Contatos de Arquivo";
             cbImportarContatosDeArquivos.UseVisualStyleBackColor = true;
@@ -460,11 +462,35 @@ namespace ListaDeTransmissaoWhatsApi
             labelContCheckBox.TabIndex = 62;
             labelContCheckBox.Text = "_";
             // 
+            // clbFiltersImport
+            // 
+            clbFiltersImport.BackColor = SystemColors.Info;
+            clbFiltersImport.FormattingEnabled = true;
+            clbFiltersImport.Location = new Point(394, 110);
+            clbFiltersImport.Name = "clbFiltersImport";
+            clbFiltersImport.Size = new Size(202, 256);
+            clbFiltersImport.TabIndex = 63;
+            clbFiltersImport.Visible = false;
+            // 
+            // cbAddPorFiltrosImport
+            // 
+            cbAddPorFiltrosImport.BackColor = SystemColors.Info;
+            cbAddPorFiltrosImport.Location = new Point(526, 372);
+            cbAddPorFiltrosImport.Name = "cbAddPorFiltrosImport";
+            cbAddPorFiltrosImport.Size = new Size(70, 34);
+            cbAddPorFiltrosImport.TabIndex = 64;
+            cbAddPorFiltrosImport.Text = "Importar";
+            cbAddPorFiltrosImport.UseVisualStyleBackColor = false;
+            cbAddPorFiltrosImport.Visible = false;
+            cbAddPorFiltrosImport.Click += cbAddPorFiltrosImport_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(797, 672);
+            Controls.Add(cbAddPorFiltrosImport);
+            Controls.Add(clbFiltersImport);
             Controls.Add(labelContCheckBox);
             Controls.Add(cbImportarContatosDeArquivos);
             Controls.Add(cbAdministração);
@@ -556,5 +582,7 @@ namespace ListaDeTransmissaoWhatsApi
         private Button cbAdministração;
         private Button cbImportarContatosDeArquivos;
         private Label labelContCheckBox;
+        private CheckedListBox clbFiltersImport;
+        private Button cbAddPorFiltrosImport;
     }
 }

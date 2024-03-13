@@ -6,11 +6,11 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>CodeCraftIcone.ico</ApplicationIcon>
+    <ApplicationIcon>Resources\CodeCraftIcone.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="CodeCraftIcone.ico" />
+    <Content Include="Resources\CodeCraftIcone.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -44,6 +44,9 @@
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <None Update="Resources\CodeCraftIcone.ico">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
